@@ -29,4 +29,6 @@ If commits landed on the wrong branch, cut the feature branch where they are, re
 - [CONTEXT.md](CONTEXT.md): the glossary. Code, tests, docs and commit messages use its words.
 - [README.md](README.md): build, run, test and the release flow.
 - [docs/orientation.md](docs/orientation.md): project layout and the household core seam.
+- [docs/xcode-cloud.md](docs/xcode-cloud.md): the Xcode Cloud workflows; read before changing build settings,
+  the scheme, the app icon or anything else that decides what is uploaded to TestFlight.
 - Specs and tickets are GitHub issues in this repo.
