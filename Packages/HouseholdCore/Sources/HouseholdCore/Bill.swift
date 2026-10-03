@@ -40,6 +40,11 @@ public struct DueDay: Hashable, Sendable {
         self.day = day
         self.month = month
     }
+    /// The Due Date this Due Day gives in `billingMonth`.
+    func dueDate(in billingMonth: BillingMonth) -> DueDate {
+        let month = self.month == .sameMonth ? billingMonth : billingMonth.shifted(by: 1)
+        return DueDate(year: month.year, month: month.month, day: day)
+    }
 }
 
 /// Which month a Due Day falls in, relative to the Billing Month.

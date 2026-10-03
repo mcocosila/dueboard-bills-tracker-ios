@@ -108,20 +108,3 @@ struct BillsTests {
         #expect(groups.map(\.count) == [2, 0, 2])
     }
 }
-
-extension NewBill {
-    /// City Power in the Household's first Category, with no Default Amount.
-    static func cityPower(in household: Household, dueDay: Int = 17) -> NewBill {
-        NewBill(
-            name: "City Power", categoryID: household.categories[0].id, dueDay: dueDay, dueMonth: .sameMonth,
-            defaultAmount: nil
-        )
-    }
-}
-
-extension WallClock {
-    /// Noon on September 15, 2026 in New York.
-    static var testing: WallClock {
-        .fixed(Date(timeIntervalSince1970: 1_789_488_000), in: TimeZone(identifier: "America/New_York")!)
-    }
-}

@@ -58,9 +58,35 @@ public struct Household {
         })
     }
 
+    /// The Billing Month's board, opening the month first if it has never been
+    /// opened: a Due for each Recurring Bill. A month already open is shown as it is,
+    /// and a month is not opened while there is no Recurring Bill, so the Bills a new
+    /// Household adds on its first day still get their Dues in the current month.
+    /// Any past month can be opened, and the month after the current one; no later.
+    public mutating func openBillingMonth(_ month: BillingMonth) throws -> MonthBoard {
+        guard (1...12).contains(month.month), month >= .earliest else { throw BillingMonthRefusal.notACalendarMonth }
+        guard month <= latestOpenableMonth else { throw BillingMonthRefusal.tooFarAhead }
+        let recurring = records.bills.filter(\.isRecurring)
+        if !records.billingMonths.contains(month), !recurring.isEmpty {
+            let dues = recurring.map { Due(generatedFrom: $0, in: month) }
+            try store.open(month, with: dues)
+            records.billingMonths.insert(month)
+            records.dues.append(contentsOf: dues)
+        }
+        return MonthBoard(
+            month: month, dues: records.dues.filter { $0.billingMonth == month }, categories: categories,
+            latestOpenable: latestOpenableMonth
+        )
+    }
+
     /// The Billing Month that "now" falls in, in the clock's time zone.
     public var currentBillingMonth: BillingMonth {
         let parts = clock.calendar.dateComponents([.year, .month], from: clock.now)
         return BillingMonth(year: parts.year!, month: parts.month!)
+    }
+
+    /// The furthest month that may be opened: the one after the current month.
+    private var latestOpenableMonth: BillingMonth {
+        currentBillingMonth.shifted(by: 1)
     }
 }
