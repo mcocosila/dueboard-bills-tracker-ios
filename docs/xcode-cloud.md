@@ -5,70 +5,57 @@ with the latest Xcode release. Nothing is archived or uploaded from the Mac: the
 Xcode 26 at most, and from April 2027 App Store Connect accepts only builds made with the iOS 27 SDK.
 
 The workflows live in App Store Connect, not in this repo. This page records how they are set up, so they
-can be checked or rebuilt by hand.
+can be checked or rebuilt.
 
 ## The two workflows
 
 | | Build and Test | TestFlight |
 |---|---|---|
 | Starts on | a push to any branch, and any pull request | a push to `main` |
-| Xcode | Latest Release | Latest Release |
-| Actions | Test (iOS), Required To Pass | Test (iOS), Required To Pass; Archive (iOS) |
-| Post-action | none | TestFlight Internal Testing, group **Developers** |
+| Xcode and macOS | Latest Release | Latest Release |
+| Actions | Test (iOS) | Test (iOS); Archive (iOS), prepared for TestFlight and App Store |
+| Clean build | off | off (only builds for external testers need one) |
 
-Both use the shared `Dueboard` scheme, whose test action runs the household core's tests. Because the Test
-action is Required To Pass, a failing test fails the build, and a failed build is not delivered to TestFlight.
-Step 7 below checks this once, without touching `main`.
+Both use the shared `Dueboard` scheme, whose test action runs the household core's tests on an iPhone 17
+simulator with the newest iOS of the selected Xcode. Every action is Required To Pass.
 
-A push to `main`, or to a branch with an open pull request, starts two builds and runs the tests twice. That
-is a few minutes of the 25 compute hours a month, and Auto-cancel Builds (on by default) drops a build that
-a newer push has made stale.
+## A failing test stops the upload
 
-Xcode Cloud numbers its builds 1, 2, 3 and so on and stamps that number on the app as its build number,
-so `CURRENT_PROJECT_VERSION` in the project is never changed by hand. The version (`MARKETING_VERSION`,
-now 0.1) is raised by hand when a release needs it.
+Xcode Cloud runs a workflow's actions side by side, not one after another, and the Archive action uploads
+to App Store Connect as soon as it ends. Required To Pass only marks the run failed; by then the archive is
+uploaded. So the gate is in the repo: [`ci_scripts/ci_pre_xcodebuild.sh`](../ci_scripts/ci_pre_xcodebuild.sh)
+runs before each action, and before the Archive action it runs the core's tests with `swift test`. A
+failing test fails the script, the archive never starts, and nothing is uploaded.
+
+This was checked on 3 October 2026 with a throwaway `ci-red` branch whose only commit broke a test: before
+the script, run 5 failed at Test but its archive still reached TestFlight as build 5.
+
+## Testers
+
+TestFlight's internal group **Developers** has access to all builds, so every build Xcode Cloud uploads is
+offered to it with no post-action. The partner is added in the first TestFlight ticket (#14).
+
+## Numbers and keys
+
+Xcode Cloud numbers its runs 1, 2, 3 and so on and stamps that number on the app as its build number, so
+`CURRENT_PROJECT_VERSION` in the project is never changed by hand. The version (`MARKETING_VERSION`, now
+0.1) is raised by hand when a release needs it. A run that uploads nothing still uses up its number.
 
 The app declares `ITSAppUsesNonExemptEncryption = NO` (it uses only the encryption built into iOS), so
 TestFlight does not hold each build waiting for an export compliance answer.
 
-## One-time setup
+A push to `main`, or to a branch with an open pull request, starts two runs and tests twice. That is a few
+minutes of the 25 compute hours a month, and Auto-cancel Builds drops a run that a newer push has made stale.
 
-The app record for `com.neodonis.dueboard` already exists in App Store Connect; it was made in the Apple
-developer setup ticket. The first workflow has to be made in Xcode; after the first build, workflows can also be edited in App
-Store Connect under the app's Xcode Cloud tab. Xcode 26 on the Mac is enough to create them, since the
-build itself runs on Apple's machines with whatever Xcode the workflow names.
+## How it was set up
 
-1. **Internal testers.** In App Store Connect, open Dueboard > TestFlight, add an internal group named
-   **Developers**, and add yourself. The partner is added in the first TestFlight ticket (#14).
-2. **Create the first workflow.** In Xcode, open the project and choose Integrate > Create Workflow (or
-   the Cloud tab of the Report navigator), pick the `Dueboard` app, then Edit Workflow.
-   - Name: **Build and Test**.
-   - Environment: Xcode version **Latest Release**, macOS **Latest Release**. Leave Clean off.
-   - Start conditions: change the suggested Branch Changes condition to **Any Branch**, and add a
-     **Pull Request Changes** condition with any source and any target branch.
-   - Actions: remove the suggested Archive action. Add a **Test** action: platform iOS, scheme
-     `Dueboard`, destination iOS Simulator (Recommended iPhones), **Required To Pass**.
-   - Post-actions: none.
-3. **Grant access to GitHub.** Xcode asks for it after the workflow is saved: install the Xcode Cloud
-   GitHub app on `mcocosila/dueboard-bills-tracker-ios` only. Xcode finds the existing app record.
-4. **Start the first build** on `main` and wait for it to pass.
-5. **Create the TestFlight workflow** (Integrate > Manage Workflows > +, or in App Store Connect):
-   - Name: **TestFlight**.
-   - Environment: Xcode **Latest Release**, macOS **Latest Release**. Leave Clean off: only builds for
-     external testers need a clean build.
-   - Start condition: **Branch Changes**, custom branch `main` only. Remove any pull request condition.
-   - Actions: a **Test** action set up as in Build and Test, **Required To Pass**; and an **Archive**
-     action, platform iOS, deployment preparation **TestFlight and App Store**, so the same build can
-     later be submitted for review.
-   - Post-action: **TestFlight Internal Testing**, group **Developers**.
-6. **Push to `main`** (or Start Build on the TestFlight workflow) and check:
-   - both workflows run and pass in App Store Connect > Xcode Cloud;
-   - the build shows in TestFlight as 0.1 (N), where N is the Xcode Cloud build number, and is
-     available to the Developers group;
-   - Xcode Cloud reports each run as a check on the GitHub commit or pull request.
+1. In Xcode, Integrate > Create Workflow, accepting the suggested workflow, and granting Xcode Cloud access
+   to GitHub: the Xcode Cloud GitHub app is installed on `mcocosila/dueboard-bills-tracker-ios` only. Only
+   this step needs Xcode; the App Store Connect API cannot create the Xcode Cloud product or connect GitHub.
+2. Everything else went through the App Store Connect API with a team key (Admin role): the suggested
+   workflow became TestFlight, Build and Test was created, and the Developers group was created with access
+   to all builds. The same changes can be made by hand under the app's Xcode Cloud tab in App Store
+   Connect, or in Xcode under Integrate > Manage Workflows.
 
-7. **Check that a failing test stops the upload.** Push a branch named `ci-red` whose only commit breaks a
-   test, for example by changing an expected month in `BillingMonthTests.swift`. Add `ci-red` to the
-   TestFlight workflow's branch start condition for a moment and start a build of it on `ci-red`. The build
-   fails at Test, the Archive result is not delivered, and no new build appears in TestFlight. Then remove
-   `ci-red` from the start condition and delete the branch.
+To start a TestFlight run on a branch other than `main`, add the branch to the workflow's manual start
+condition first; Xcode Cloud refuses a manual run on a branch the workflow does not list.

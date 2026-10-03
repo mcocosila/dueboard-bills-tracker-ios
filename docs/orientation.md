@@ -17,6 +17,7 @@ Packages/HouseholdCore/        The household core, a Swift package of its own
   Tests/HouseholdCoreTests/    Swift Testing tests of the core
 CONTEXT.md                     The glossary; the code uses these words
 docs/xcode-cloud.md            How Xcode Cloud builds, tests and uploads to TestFlight
+ci_scripts/                    Scripts Xcode Cloud runs during a build: tests before every archive
 ```
 
 The app depends on the core, never the other way round. Swift enforces this: the core is a separate
