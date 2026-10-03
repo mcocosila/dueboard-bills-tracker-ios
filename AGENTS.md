@@ -32,17 +32,25 @@ only when the user asks for it, even one already named as coming next.
 - Body: the issue link on the first line, then a `## What changed` section of bullets. When the issue
   has steps left to do by hand (App Store Connect, TestFlight), add `## Still to do by hand`; when the work
   was checked by running something, add `## Checked`.
-- The issue link is `Closes #<issue>` only when merging the pull request meets every acceptance criterion
-  of the issue. Otherwise it is `Refs #<issue>`, in the pull request and in its commits.
+- The issue link is `Closes #<issue>` only when every acceptance criterion box in the issue is ticked
+  before the pull request is opened (see Issues). Otherwise it is `Refs #<issue>`, in the pull request and
+  in its commits.
 - `#<issue>` appears only right after `Refs` or `Closes`. In a sentence, write the issue as "issue 17",
   with no `#`: GitHub closes an issue when close, fix or resolve, in any tense, comes before its `#N` in a
   merged commit or pull request, so "merging #19 closed #17" closed issue 17 early.
 
 ## Issues
 
-An issue stays open until every acceptance criterion is checked. Tick a criterion's box in the issue body
-once it is met and verified, merged or done by hand, and close the issue only when all of its boxes are
-ticked.
+An issue closes only with every acceptance criterion box ticked. Merging a `Closes` pull request closes the
+issue at once, so the boxes are ticked first:
+
+1. Before opening the pull request, verify each criterion on the branch: a passing test, a run in the
+   Simulator, the changed file.
+2. Tick the box of each verified criterion in the issue body.
+3. A criterion that waits on a step by hand or on the merge itself stays unticked, and the pull request
+   says `Refs`. Tick it once it is done, and close the issue when the last box is ticked.
+
+Done when the pull request is open and every criterion its work verified is ticked in the issue.
 
 ## Where things are
 
