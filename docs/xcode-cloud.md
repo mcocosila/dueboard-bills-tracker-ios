@@ -16,9 +16,13 @@ can be checked or rebuilt by hand.
 | Actions | Test (iOS), Required To Pass | Test (iOS), Required To Pass; Archive (iOS) |
 | Post-action | none | TestFlight Internal Testing, group **Developers** |
 
-Both use the shared `Dueboard` scheme, whose test action runs the household core's tests. A test that
-fails fails the build, and Xcode Cloud runs the TestFlight post-action only for a build that succeeded, so a
-failing test stops the upload.
+Both use the shared `Dueboard` scheme, whose test action runs the household core's tests. Because the Test
+action is Required To Pass, a failing test fails the build, and a failed build is not delivered to TestFlight.
+Step 7 below checks this once, without touching `main`.
+
+A push to `main`, or to a branch with an open pull request, starts two builds and runs the tests twice. That
+is a few minutes of the 25 compute hours a month, and Auto-cancel Builds (on by default) drops a build that
+a newer push has made stale.
 
 Xcode Cloud numbers its builds 1, 2, 3 and so on and stamps that number on the app as its build number,
 so `CURRENT_PROJECT_VERSION` in the project is never changed by hand. The version (`MARKETING_VERSION`,
@@ -29,12 +33,13 @@ TestFlight does not hold each build waiting for an export compliance answer.
 
 ## One-time setup
 
-The first workflow has to be made in Xcode; after the first build, workflows can also be edited in App
+The app record for `com.neodonis.dueboard` already exists in App Store Connect; it was made in the Apple
+developer setup ticket. The first workflow has to be made in Xcode; after the first build, workflows can also be edited in App
 Store Connect under the app's Xcode Cloud tab. Xcode 26 on the Mac is enough to create them, since the
 build itself runs on Apple's machines with whatever Xcode the workflow names.
 
 1. **Internal testers.** In App Store Connect, open Dueboard > TestFlight, add an internal group named
-   **Developers**, and add yourself. The partner joins in the first TestFlight ticket.
+   **Developers**, and add yourself. The partner is added in the first TestFlight ticket (#14).
 2. **Create the first workflow.** In Xcode, open the project and choose Integrate > Create Workflow (or
    the Cloud tab of the Report navigator), pick the `Dueboard` app, then Edit Workflow.
    - Name: **Build and Test**.
@@ -49,7 +54,8 @@ build itself runs on Apple's machines with whatever Xcode the workflow names.
 4. **Start the first build** on `main` and wait for it to pass.
 5. **Create the TestFlight workflow** (Integrate > Manage Workflows > +, or in App Store Connect):
    - Name: **TestFlight**.
-   - Environment: Xcode **Latest Release**, macOS **Latest Release**.
+   - Environment: Xcode **Latest Release**, macOS **Latest Release**. Leave Clean off: only builds for
+     external testers need a clean build.
    - Start condition: **Branch Changes**, custom branch `main` only. Remove any pull request condition.
    - Actions: a **Test** action set up as in Build and Test, **Required To Pass**; and an **Archive**
      action, platform iOS, deployment preparation **TestFlight and App Store**, so the same build can
@@ -61,5 +67,8 @@ build itself runs on Apple's machines with whatever Xcode the workflow names.
      available to the Developers group;
    - Xcode Cloud reports each run as a check on the GitHub commit or pull request.
 
-To prove a failing test stops the upload, push a branch whose first commit breaks a test, merge it to
-`main`, check that the TestFlight build fails at Test and no new build reaches TestFlight, then revert.
+7. **Check that a failing test stops the upload.** Push a branch named `ci-red` whose only commit breaks a
+   test, for example by changing an expected month in `BillingMonthTests.swift`. Add `ci-red` to the
+   TestFlight workflow's branch start condition for a moment and start a build of it on `ci-red`. The build
+   fails at Test, the Archive result is not delivered, and no new build appears in TestFlight. Then remove
+   `ci-red` from the start condition and delete the branch.

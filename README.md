@@ -34,13 +34,13 @@ each step in more detail.
 ## Release flow
 
 Xcode Cloud makes every build that leaves the Mac, with the latest Xcode release on Apple's machines.
-**Nothing is archived or uploaded from the Mac**: it runs Xcode 26 at most, and from April 2027 App Store
-Connect accepts only builds made with the iOS 27 SDK.
+**Nothing is archived or uploaded from the Mac**, because it cannot run the Xcode that App Store Connect
+will require.
 
-- **Every push and pull request**: the Build and Test workflow runs the core's tests.
+- **A push to any branch, and any pull request**: the Build and Test workflow runs the core's tests.
 - **Every push to `main`**: the TestFlight workflow runs the tests, archives the app and uploads it to
   TestFlight for the internal testers. A failing test fails the build, so nothing is uploaded.
 - **App Store**: a build already in TestFlight is submitted for review from App Store Connect.
 
-Build numbers come from Xcode Cloud; the version is raised by hand in the project. How the workflows are
-set up is in [docs/xcode-cloud.md](docs/xcode-cloud.md).
+Why, how the workflows are set up, and where build numbers come from are in
+[docs/xcode-cloud.md](docs/xcode-cloud.md).
