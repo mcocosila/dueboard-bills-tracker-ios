@@ -16,6 +16,7 @@ Packages/HouseholdCore/        The household core, a Swift package of its own
   Sources/HouseholdCore/       Every domain rule from CONTEXT.md, in plain Swift
   Tests/HouseholdCoreTests/    Swift Testing tests of the core
 CONTEXT.md                     The glossary; the code uses these words
+docs/xcode-cloud.md            How Xcode Cloud builds, tests and uploads to TestFlight
 ```
 
 The app depends on the core, never the other way round. Swift enforces this: the core is a separate

@@ -30,3 +30,17 @@ each step in more detail.
   xcodebuild test -project Dueboard.xcodeproj -scheme Dueboard \
     -destination 'platform=iOS Simulator,name=iPhone 17'
   ```
+
+## Release flow
+
+Xcode Cloud makes every build that leaves the Mac, with the latest Xcode release on Apple's machines.
+**Nothing is archived or uploaded from the Mac**, because it cannot run the Xcode that App Store Connect
+will require.
+
+- **A push to any branch, and any pull request**: the Build and Test workflow runs the core's tests.
+- **Every push to `main`**: the TestFlight workflow runs the tests, archives the app and uploads it to
+  TestFlight for the internal testers. A failing test fails the build, so nothing is uploaded.
+- **App Store**: a build already in TestFlight is submitted for review from App Store Connect.
+
+Why, how the workflows are set up, and where build numbers come from are in
+[docs/xcode-cloud.md](docs/xcode-cloud.md).
