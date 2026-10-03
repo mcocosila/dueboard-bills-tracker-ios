@@ -1,0 +1,13 @@
+# Xcode per-user state and build output
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Other editors
+.idea/
+.DS_Store

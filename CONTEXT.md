@@ -4,6 +4,10 @@ A monthly checklist of household bills so that every amount is paid before its d
 
 ## Language
 
+**Household**:
+The shared set of Categories, Bills and Billing Months.
+_Avoid_: Account, family, workspace, team
+
 **Bill**:
 Something paid from a Billing Month, described once, e.g. "City Power". Defines the Category, the Due Day rule, and optionally a Default Amount. Either Recurring or Occasional. The Bills together are the one list every Due is drawn from.
 _Avoid_: Expense, template item, subscription, catalog, inventory
