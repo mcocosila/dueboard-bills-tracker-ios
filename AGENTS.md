@@ -17,6 +17,14 @@ Done when the pull request is open and `main` matches `origin/main`.
 If commits landed on the wrong branch, cut the feature branch where they are, reset that branch to
 `origin/<branch>`, and carry on from the feature branch.
 
+## After the user merges a pull request
+
+1. `git fetch --prune origin && git checkout main && git pull --ff-only origin main`
+2. Delete the feature branch on GitHub and locally: `git push origin --delete <branch>` and
+   `git branch -d <branch>`.
+
+Done when `git branch -a` lists only `main` and `origin/main`.
+
 ## Pull requests
 
 - Title: the first commit's summary line.
