@@ -33,6 +33,9 @@ Done when `git branch -a` lists only `main` and `origin/main`.
   was checked by running something, add `## Checked`.
 - The issue link is `Closes #<issue>` only when merging the pull request meets every acceptance criterion
   of the issue. Otherwise it is `Refs #<issue>`, in the pull request and in its commits.
+- `#<issue>` appears only right after `Refs` or `Closes`. In a sentence, write the issue as "issue 17",
+  with no `#`: GitHub closes an issue when close, fix or resolve, in any tense, comes before its `#N` in a
+  merged commit or pull request, so "merging #19 closed #17" closed issue 17 early.
 
 ## Issues
 
