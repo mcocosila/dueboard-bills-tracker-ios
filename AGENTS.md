@@ -2,6 +2,10 @@
 
 ## Start every piece of work on a fresh branch
 
+Keep one pull request open at a time.
+
+0. `gh pr list --author @me --state open`. If a pull request is open, ask the user whether the new work goes
+   on its branch or waits until it is merged; either way, no new branch.
 1. `git fetch origin && git checkout main && git pull --ff-only origin main`
 2. `git checkout -b <issue number>-<kebab title>`, e.g. `17-xcode-cloud`. Work with no issue drops the
    number: `agents-md`.
