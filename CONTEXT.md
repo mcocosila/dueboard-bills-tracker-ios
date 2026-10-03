@@ -29,7 +29,7 @@ The calendar month in which a Due must be paid, and the set of Dues paid from it
 _Avoid_: Period, cycle, template
 
 **Category**:
-A named group of Bills. The three Categories are House, Education, and Credit Cards.
+A named group of Bills. Each Household has its own Categories, in its own order; a new Household starts with House, Education and Credit Cards as suggestions.
 _Avoid_: Group, section, bucket
 
 **Due Day**:
