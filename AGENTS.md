@@ -23,7 +23,8 @@ If commits landed on the wrong branch, cut the feature branch where they are, re
 2. Delete the feature branch on GitHub and locally: `git push origin --delete <branch>` and
    `git branch -d <branch>`.
 
-Done when `git branch -a` lists only `main` and `origin/main`.
+Done when `git branch -a` lists only `main` and `origin/main`. Then stop: the next issue or task starts
+only when the user asks for it, even one already named as coming next.
 
 ## Pull requests
 
