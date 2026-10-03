@@ -22,9 +22,12 @@ final class CoreDataHouseholdStore: HouseholdStore {
             request.fetchLimit = 1
             guard let household = try context.fetch(request).first else { return nil }
             let categories = (household.categories as? Set<StoredCategory>) ?? []
+            let billingMonths = (household.billingMonths as? Set<StoredBillingMonth>) ?? []
             return HouseholdRecords(
                 categories: try categories.map(Category.init),
-                bills: try categories.flatMap { ($0.bills as? Set<StoredBill>) ?? [] }.map(Bill.init)
+                bills: try categories.flatMap { ($0.bills as? Set<StoredBill>) ?? [] }.map(Bill.init),
+                billingMonths: Set(billingMonths.map(BillingMonth.init)),
+                dues: try billingMonths.flatMap { ($0.dues as? Set<StoredDue>) ?? [] }.map(Due.init)
             )
         }
     }
@@ -63,6 +66,48 @@ final class CoreDataHouseholdStore: HouseholdStore {
             try context.save()
         }
     }
+
+    func open(_ month: BillingMonth, with dues: [Due]) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            let households = StoredHousehold.fetchRequest()
+            households.sortDescriptors = [NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true)]
+            households.fetchLimit = 1
+            guard let household = try context.fetch(households).first else { throw DamagedRecord(entity: "Household") }
+            let bills = Dictionary(
+                uniqueKeysWithValues: try context.fetch(StoredBill.fetchRequest()).compactMap { bill in bill.id.map { ($0, bill) } }
+            )
+            let categories = Dictionary(
+                uniqueKeysWithValues: try context.fetch(StoredCategory.fetchRequest()).compactMap { category in
+                    category.id.map { ($0, category) }
+                }
+            )
+            let storedMonth = StoredBillingMonth(context: context)
+            storedMonth.year = Int32(month.year)
+            storedMonth.month = Int16(month.month)
+            storedMonth.household = household
+            for due in dues {
+                guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
+                guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
+                let stored = StoredDue(context: context)
+                stored.id = due.id
+                stored.name = due.name
+                stored.position = Int64(due.position)
+                stored.dueDate = due.dueDate.stored
+                stored.amount = due.amount.map { NSDecimalNumber(decimal: $0) }
+                stored.bill = bill
+                stored.category = category
+                stored.billingMonth = storedMonth
+            }
+            do {
+                try context.save()
+            } catch {
+                // All or nothing: a month half saved would be opened again with only some of its Dues.
+                context.rollback()
+                throw error
+            }
+        }
+    }
 }
 
 /// A stored record is missing something every record of its kind has. The store
@@ -94,5 +139,42 @@ private extension Bill {
             isRecurring: stored.isRecurring,
             position: Int(stored.position)
         )
+    }
+}
+
+private extension BillingMonth {
+    init(_ stored: StoredBillingMonth) {
+        self.init(year: Int(stored.year), month: Int(stored.month))
+    }
+}
+
+private extension Due {
+    init(_ stored: StoredDue) throws {
+        guard let id = stored.id, let name = stored.name, let billID = stored.bill?.id,
+              let categoryID = stored.category?.id, let month = stored.billingMonth, let dueDate = stored.dueDate.flatMap(DueDate.init(stored:))
+        else { throw DamagedRecord(entity: "Due") }
+        self.init(
+            id: id,
+            billID: billID,
+            billingMonth: BillingMonth(month),
+            name: name,
+            categoryID: categoryID,
+            position: Int(stored.position),
+            dueDate: dueDate,
+            amount: stored.amount?.decimalValue
+        )
+    }
+}
+
+private extension DueDate {
+    /// Kept as text, "2026-09-01": a day on the calendar, the same in every time zone.
+    var stored: String {
+        String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    init?(stored: String) {
+        let parts = stored.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        self.init(year: parts[0], month: parts[1], day: parts[2])
     }
 }

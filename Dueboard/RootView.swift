@@ -8,7 +8,7 @@ struct RootView: View {
     var body: some View {
         TabView {
             Tab("Month", systemImage: "calendar") {
-                PlaceholderView(month: household.currentBillingMonth)
+                MonthView(household: $household)
             }
             Tab("Bills", systemImage: "list.bullet") {
                 BillsView(household: $household)

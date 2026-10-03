@@ -10,11 +10,12 @@ Dueboard.xcodeproj/            The Xcode project: one app target and the shared 
 Dueboard/                      The app: SwiftUI screens and, later, the CloudKit and notification adapters
   DueboardApp.swift            The entry point (@main); opens the Household and shows the first screen
   RootView.swift               The tabs: the Billing Month and the Bills
-  PlaceholderView.swift        Stands in for the Month board until it is built
+  MonthView.swift              The Month board: a Billing Month's Dues by Category, stepping between months
   BillsView.swift              The Bills list, grouped by Category
   AddBillView.swift            The form for adding a Bill
   CoreDataHouseholdStore.swift Keeps the Household in Core Data on the phone
-  Dueboard.xcdatamodeld        The Core Data model: Household, Category and Bill
+  Dueboard.xcdatamodeld        The Core Data model, one version per change: Household, Category, Bill,
+                               Billing Month and Due
   Assets.xcassets              App icon and accent colour
 Packages/HouseholdCore/        The household core, a Swift package of its own
   Package.swift                Declares the HouseholdCore library and its test target
@@ -39,7 +40,7 @@ because Swift packages find their files by folder.
 1. `open Dueboard.xcodeproj`.
 2. In the toolbar at the top, the scheme menu should read **Dueboard**. Next to it is the run destination:
    pick an iPhone simulator, for example iPhone 17.
-3. Press **Cmd-R** (Product > Run). The Simulator opens and shows "Dueboard" with the current month under it.
+3. Press **Cmd-R** (Product > Run). The Simulator opens on the Month tab, titled with the current month.
    **Cmd-.** stops it.
 
 The deployment target is iOS 18.0, so the app runs on iOS 18 and every later version. The newest
@@ -88,26 +89,32 @@ reads as the rules of the app.
 
 ## Reading a SwiftUI view
 
-`PlaceholderView.swift`, slightly trimmed:
+`DueRow` from `MonthView.swift`, slightly trimmed:
 
 ```swift
-struct PlaceholderView: View {          // a screen, or part of one, is a struct that conforms to View
-    let month: BillingMonth             // its input, passed in by whoever shows it
+private struct DueRow: View {           // a screen, or part of one, is a struct that conforms to View
+    let due: Due                        // its input, passed in by whoever shows it
 
     var body: some View {               // what to draw; SwiftUI calls this whenever the input changes
-        VStack(spacing: 8) {            // stack the children top to bottom, 8 points apart
-            Text("Dueboard")
-                .font(.largeTitle.bold())   // modifiers: each one wraps the view and returns a new one
-            Text(title)
-                .foregroundStyle(.secondary)
+        HStack {                        // lay the children out left to right
+            VStack(alignment: .leading, spacing: 2) {   // name above date, left-aligned, 2 points apart
+                Text(due.name)
+                Text(due.dueDate.date, format: .dateTime.month(.abbreviated).day())
+                    .foregroundStyle(.secondary)        // modifiers: each one wraps the view and returns a new one
+            }
+            Spacer()                    // pushes the Amount to the right edge
+            if let amount = due.amount {
+                Text(amount, format: .currency(code: "USD"))
+            } else {
+                Text("No amount")
+            }
         }
     }
 }
-
-#Preview {                              // what Xcode's canvas shows; never part of the running app
-    PlaceholderView(month: BillingMonth(year: 2026, month: 9))
-}
 ```
+
+At the bottom of `MonthView.swift`, `#Preview { ... }` is what Xcode's canvas shows; it is never part of the
+running app.
 
 Things to know when reviewing a view:
 
@@ -138,6 +145,7 @@ public struct Household {
     public var billsList: BillsList { get }
     public mutating func addBill(_ new: NewBill) throws -> Bill
     public var currentBillingMonth: BillingMonth { get }
+    public mutating func openBillingMonth(_ month: BillingMonth) throws -> MonthBoard
 }
 ```
 
@@ -153,6 +161,11 @@ previews pass `InMemoryHouseholdStore`. A store only keeps and returns records: 
 The Core Data model already follows CloudKit's limits (every attribute optional or with a default, every
 relationship optional and with an inverse, no unique constraints and no Deny delete rule), so the iCloud
 sync ticket can switch the container without reshaping the model.
+
+A change to the Core Data model goes in a new model version, never into an existing one: Core Data upgrades
+the store already on a phone only when the app still ships the model that store was made with. In Xcode,
+select `Dueboard.xcdatamodeld`, then Editor > Add Model Version, make the change in the new version and set
+it as current in the File inspector. `Dueboard 2` added Billing Month and Due.
 
 **The clock is injected.** The core never asks the device for the date or the time zone itself. Whoever
 creates a `Household` hands it a `WallClock`, which supplies `now` and the `timeZone`:

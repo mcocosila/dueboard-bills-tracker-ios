@@ -8,16 +8,24 @@ public protocol HouseholdStore: AnyObject {
     func start(_ household: HouseholdRecords) throws
     /// Keeps a Bill that has just been added.
     func insert(_ bill: Bill) throws
+    /// Keeps a Billing Month that has just been opened, with the Dues it was
+    /// opened with, all or nothing.
+    func open(_ month: BillingMonth, with dues: [Due]) throws
 }
 
 /// Everything a Household is made of, as a store keeps it.
 public struct HouseholdRecords: Sendable {
     public var categories: [Category]
     public var bills: [Bill]
+    /// The Billing Months opened so far, each one once.
+    public var billingMonths: Set<BillingMonth>
+    public var dues: [Due]
 
-    public init(categories: [Category], bills: [Bill] = []) {
+    public init(categories: [Category], bills: [Bill] = [], billingMonths: Set<BillingMonth> = [], dues: [Due] = []) {
         self.categories = categories
         self.bills = bills
+        self.billingMonths = billingMonths
+        self.dues = dues
     }
 }
 
@@ -37,5 +45,10 @@ public final class InMemoryHouseholdStore: HouseholdStore {
 
     public func insert(_ bill: Bill) throws {
         household?.bills.append(bill)
+    }
+
+    public func open(_ month: BillingMonth, with dues: [Due]) throws {
+        household?.billingMonths.insert(month)
+        household?.dues.append(contentsOf: dues)
     }
 }
