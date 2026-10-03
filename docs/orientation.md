@@ -8,8 +8,13 @@ next to it.
 ```
 Dueboard.xcodeproj/            The Xcode project: one app target and the shared Dueboard scheme
 Dueboard/                      The app: SwiftUI screens and, later, the CloudKit and notification adapters
-  DueboardApp.swift            The entry point (@main); builds the Household and shows the first screen
-  PlaceholderView.swift        Stands in for the Month board until the screens ticket
+  DueboardApp.swift            The entry point (@main); opens the Household and shows the first screen
+  RootView.swift               The tabs: the Billing Month and the Bills
+  PlaceholderView.swift        Stands in for the Month board until it is built
+  BillsView.swift              The Bills list, grouped by Category
+  AddBillView.swift            The form for adding a Bill
+  CoreDataHouseholdStore.swift Keeps the Household in Core Data on the phone
+  Dueboard.xcdatamodeld        The Core Data model: Household, Category and Bill
   Assets.xcassets              App icon and accent colour
 Packages/HouseholdCore/        The household core, a Swift package of its own
   Package.swift                Declares the HouseholdCore library and its test target
@@ -112,7 +117,8 @@ Things to know when reviewing a view:
 - Modifiers read top to bottom, and their order matters: `.padding().background(.red)` colours the
   padding too, `.background(.red).padding()` does not.
 - `@State` marks a value the view owns and can change (a text being typed); `@Binding` is a value owned by
-  a parent that the view may change. Neither appears yet.
+  a parent that the view may change. `DueboardApp` owns the `Household` as `@State` and hands it down as a
+  `@Binding`, so a Bill added in `AddBillView` shows at once in `BillsView`.
 - The **canvas** (Editor > Canvas, or **Cmd-Option-Return**) renders the `#Preview` live next to the code.
 - What to look for in review: a view should only show what the core returns and send commands to it. Any
   `if` that decides a domain rule (is this Due Overdue? can this Bill be added?) belongs in the core, with
@@ -123,14 +129,30 @@ Things to know when reviewing a view:
 The household core is the one place every domain rule lives, and the one place tests run against. Screens
 send it commands and show what it returns; they hold no rules of their own.
 
-Today the core is just enough to show the shape:
+Its shape so far:
 
 ```swift
 public struct Household {
-    public init(clock: WallClock)
+    public static func open(in store: HouseholdStore, clock: WallClock) throws -> Household
+    public var categories: [Category] { get }
+    public var billsList: BillsList { get }
+    public mutating func addBill(_ new: NewBill) throws -> Bill
     public var currentBillingMonth: BillingMonth { get }
 }
 ```
+
+A command that breaks a rule throws a refusal, such as `BillRefusal.dueDayOutOfRange`, whose
+`localizedDescription` is the readable reason the screen shows ("Day must be 1 to 28").
+
+**The store is injected.** `open(in:clock:)` loads the Household from a `HouseholdStore`, or starts a new
+one with the suggested Categories when the store holds none. Every command writes what it changed to the
+store. The app passes `CoreDataHouseholdStore`, which keeps everything in Core Data on the phone; tests and
+previews pass `InMemoryHouseholdStore`. A store only keeps and returns records: the rules stay in
+`Household`, so the tests of the core cover them whatever the store.
+
+The Core Data model already follows CloudKit's limits (every attribute optional or with a default, every
+relationship optional and with an inverse, no unique constraints and no Deny delete rule), so the iCloud
+sync ticket can switch the container without reshaping the model.
 
 **The clock is injected.** The core never asks the device for the date or the time zone itself. Whoever
 creates a `Household` hands it a `WallClock`, which supplies `now` and the `timeZone`:
@@ -146,10 +168,9 @@ what comes back, the same way a screen would. It never reads private state or st
 core stores things can change without breaking a test. `import HouseholdCore` (not
 `@testable import`) keeps tests honest: they can only see what is `public`.
 
-**What comes next**: later tickets grow this same interface. Commands such as add a Bill, open a Billing
-Month or mark a Due Paid; outputs such as the Month board, the Bills list, refusals with readable reasons
-and the reminder plan. Storage (Core Data with CloudKit) and notifications plug in as adapters in the app,
-outside the core.
+**What comes next**: later tickets grow this same interface. Commands such as open a Billing Month or mark
+a Due Paid; outputs such as the Month board and the reminder plan. CloudKit sync and notifications plug in
+as adapters in the app, outside the core.
 
 **`public`**: Swift hides everything in a module from other modules unless it is marked `public`. The
 app and the tests are other modules, so in the core `public` marks the interface they may use, and anything
