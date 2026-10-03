@@ -104,7 +104,7 @@ private struct DueRow: View {           // a screen, or part of one, is a struct
             }
             Spacer()                    // pushes the Amount to the right edge
             if let amount = due.amount {
-                Text(amount, format: .currency(code: "USD"))
+                Text(amount, format: .currency(code: Locale.current.currency?.identifier ?? "USD"))
             } else {
                 Text("No amount")
             }

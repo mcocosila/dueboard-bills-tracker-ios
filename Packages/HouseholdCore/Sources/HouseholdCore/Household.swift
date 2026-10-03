@@ -60,13 +60,12 @@ public struct Household {
 
     /// The Billing Month's board, opening the month first if it has never been
     /// opened: a Due for each Recurring Bill. A month already open is shown as it is,
-    /// and a month is not opened while there is no Recurring Bill.
+    /// and a month is not opened while there is no Recurring Bill, so the Bills a new
+    /// Household adds on its first day still get their Dues in the current month.
     /// Any past month can be opened, and the month after the current one; no later.
     public mutating func openBillingMonth(_ month: BillingMonth) throws -> MonthBoard {
         guard (1...12).contains(month.month), month >= .earliest else { throw BillingMonthRefusal.notACalendarMonth }
         guard month <= latestOpenableMonth else { throw BillingMonthRefusal.tooFarAhead }
-        // With no Recurring Bills there is nothing to generate yet. The month stays unopened, so the Bills
-        // added on a new Household's first day still get their Dues in it.
         let recurring = records.bills.filter(\.isRecurring)
         if !records.billingMonths.contains(month), !recurring.isEmpty {
             let dues = recurring.map { Due(generatedFrom: $0, in: month) }

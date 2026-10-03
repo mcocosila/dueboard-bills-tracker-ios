@@ -112,14 +112,3 @@ struct OpeningAMonthTests {
         #expect(groups.map { $0.dues.map(\.name) } == [["Mortgage", "Water", "City Power"], ["Store Card", "Visa"]])
     }
 }
-
-extension NewBill {
-    /// Riverside School in the Household's second Category: paid in one month, due on the 1st of the next,
-    /// with a Default Amount of 450.00.
-    static func riversideSchool(in household: Household) -> NewBill {
-        NewBill(
-            name: "Riverside School", categoryID: household.categories[1].id, dueDay: 1, dueMonth: .nextMonth,
-            defaultAmount: Decimal(string: "450.00")
-        )
-    }
-}

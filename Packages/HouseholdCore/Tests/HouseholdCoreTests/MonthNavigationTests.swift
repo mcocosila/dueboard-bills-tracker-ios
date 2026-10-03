@@ -28,6 +28,23 @@ struct MonthNavigationTests {
         #expect(refusal?.localizedDescription == "Only the month after the current one can be opened yet")
     }
 
+    @Test("a month refused for being two ahead is not kept, so it opens with every Bill once it can be opened")
+    func aRefusedMonthIsNotKept() throws {
+        let store = InMemoryHouseholdStore()
+        var household = try Household.open(in: store, clock: .testing)
+        try household.addBill(.cityPower(in: household))
+        let november = BillingMonth(year: 2026, month: 11)
+        _ = try? household.openBillingMonth(november)
+        try household.addBill(.riversideSchool(in: household))
+
+        // Noon on October 15 in New York: November is now the month after the current one.
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-10-15T16:00:00Z"))
+        let newYork = try #require(TimeZone(identifier: "America/New_York"))
+        var later = try Household.open(in: store, clock: .fixed(now, in: newYork))
+
+        #expect(try later.openBillingMonth(november).dues.map(\.name) == ["City Power", "Riverside School"])
+    }
+
     @Test("a past month can be opened, with its Dues")
     func aPastMonthCanBeOpened() throws {
         var household = try Household.open(in: InMemoryHouseholdStore(), clock: .testing)

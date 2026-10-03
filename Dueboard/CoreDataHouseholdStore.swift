@@ -17,10 +17,7 @@ final class CoreDataHouseholdStore: HouseholdStore {
     func load() throws -> HouseholdRecords? {
         let context = container.viewContext
         return try context.performAndWait {
-            let request = StoredHousehold.fetchRequest()
-            request.sortDescriptors = [NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true)]
-            request.fetchLimit = 1
-            guard let household = try context.fetch(request).first else { return nil }
+            guard let household = try firstHousehold(in: context) else { return nil }
             let categories = (household.categories as? Set<StoredCategory>) ?? []
             let billingMonths = (household.billingMonths as? Set<StoredBillingMonth>) ?? []
             return HouseholdRecords(
@@ -70,43 +67,54 @@ final class CoreDataHouseholdStore: HouseholdStore {
     func open(_ month: BillingMonth, with dues: [Due]) throws {
         let context = container.viewContext
         try context.performAndWait {
-            let households = StoredHousehold.fetchRequest()
-            households.sortDescriptors = [NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true)]
-            households.fetchLimit = 1
-            guard let household = try context.fetch(households).first else { throw DamagedRecord(entity: "Household") }
-            let bills = Dictionary(
-                uniqueKeysWithValues: try context.fetch(StoredBill.fetchRequest()).compactMap { bill in bill.id.map { ($0, bill) } }
-            )
-            let categories = Dictionary(
-                uniqueKeysWithValues: try context.fetch(StoredCategory.fetchRequest()).compactMap { category in
-                    category.id.map { ($0, category) }
-                }
-            )
-            let storedMonth = StoredBillingMonth(context: context)
-            storedMonth.year = Int32(month.year)
-            storedMonth.month = Int16(month.month)
-            storedMonth.household = household
-            for due in dues {
-                guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
-                guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
-                let stored = StoredDue(context: context)
-                stored.id = due.id
-                stored.name = due.name
-                stored.position = Int64(due.position)
-                stored.dueDate = due.dueDate.stored
-                stored.amount = due.amount.map { NSDecimalNumber(decimal: $0) }
-                stored.bill = bill
-                stored.category = category
-                stored.billingMonth = storedMonth
-            }
             do {
+                guard let household = try firstHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+                let bills = try byID(StoredBill.fetchRequest(), \.id, in: context)
+                let categories = try byID(StoredCategory.fetchRequest(), \.id, in: context)
+                let storedMonth = StoredBillingMonth(context: context)
+                storedMonth.year = Int32(month.year)
+                storedMonth.month = Int16(month.month)
+                storedMonth.household = household
+                for due in dues {
+                    guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
+                    guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
+                    let stored = StoredDue(context: context)
+                    stored.id = due.id
+                    stored.name = due.name
+                    stored.position = Int64(due.position)
+                    stored.dueDate = due.dueDate.stored
+                    stored.amount = due.amount.map { NSDecimalNumber(decimal: $0) }
+                    stored.bill = bill
+                    stored.category = category
+                    stored.billingMonth = storedMonth
+                }
                 try context.save()
             } catch {
-                // All or nothing: a month half saved would be opened again with only some of its Dues.
+                // All or nothing: a month left half made in the context would be saved by the next
+                // command, and the month would then stay open with only some of its Dues.
                 context.rollback()
                 throw error
             }
         }
+    }
+
+    /// The Household this phone keeps: the first one started, should there ever be more.
+    private func firstHousehold(in context: NSManagedObjectContext) throws -> StoredHousehold? {
+        let request = StoredHousehold.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true)]
+        request.fetchLimit = 1
+        return try context.fetch(request).first
+    }
+
+    /// Every record the request fetches, by id. The model can have no unique
+    /// constraints (CloudKit allows none), so two records sharing an id keep the first.
+    private func byID<Record>(
+        _ request: NSFetchRequest<Record>, _ id: KeyPath<Record, UUID?>, in context: NSManagedObjectContext
+    ) throws -> [UUID: Record] {
+        Dictionary(
+            try context.fetch(request).compactMap { record in record[keyPath: id].map { ($0, record) } },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 }
 

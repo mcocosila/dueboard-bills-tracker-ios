@@ -32,11 +32,9 @@ public struct Due: Hashable, Identifiable, Sendable {
     /// A new Due for `bill` in `month`, its Due Date computed from the Due Day and its
     /// Amount pre-filled from the Default Amount.
     init(generatedFrom bill: Bill, in month: BillingMonth) {
-        let dueMonth = bill.dueDay.month == .sameMonth ? month : month.shifted(by: 1)
         self.init(
             id: UUID(), billID: bill.id, billingMonth: month, name: bill.name, categoryID: bill.categoryID,
-            position: bill.position, dueDate: DueDate(year: dueMonth.year, month: dueMonth.month, day: bill.dueDay.day),
-            amount: bill.defaultAmount
+            position: bill.position, dueDate: bill.dueDay.dueDate(in: month), amount: bill.defaultAmount
         )
     }
 }
