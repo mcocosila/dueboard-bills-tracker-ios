@@ -20,9 +20,17 @@ If commits landed on the wrong branch, cut the feature branch where they are, re
 ## Pull requests
 
 - Title: the first commit's summary line.
-- Body: `Closes #<issue>` on the first line, then a `## What changed` section of bullets. When the issue
+- Body: the issue link on the first line, then a `## What changed` section of bullets. When the issue
   has steps left to do by hand (App Store Connect, TestFlight), add `## Still to do by hand`; when the work
   was checked by running something, add `## Checked`.
+- The issue link is `Closes #<issue>` only when merging the pull request meets every acceptance criterion
+  of the issue. Otherwise it is `Refs #<issue>`, in the pull request and in its commits.
+
+## Issues
+
+An issue stays open until every acceptance criterion is checked. Tick a criterion's box in the issue body
+once it is met and verified, merged or done by hand, and close the issue only when all of its boxes are
+ticked.
 
 ## Where things are
 
