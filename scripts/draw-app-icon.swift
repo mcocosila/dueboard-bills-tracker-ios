@@ -3,7 +3,8 @@
 //
 // Run from the repo root:  swift scripts/draw-app-icon.swift
 // It writes Dueboard/Assets.xcassets/AppIcon.appiconset/AppIcon.png: 1024x1024 with no
-// alpha channel, as App Store Connect requires.
+// alpha channel, as App Store Connect requires. A path as the first argument writes there
+// instead, to try a change without touching the icon.
 import AppKit
 
 let output = CommandLine.arguments.count > 1
@@ -38,11 +39,12 @@ ctx.fill(CGRect(x: 0, y: 0, width: side, height: side))
 drawCentred("D", font: .systemFont(ofSize: 640, weight: .bold), colour: .white,
             centre: CGPoint(x: side / 2, y: side / 2))
 
-// The coin: an ellipse tilted 18 degrees, with its edge showing below the face
+// The coin: a tilted ellipse over the D's lower-right curve, with its edge showing below the face
+let coinCentre = CGPoint(x: 712, y: 300), tiltDegrees: CGFloat = 18
 let rx: CGFloat = 160, ry: CGFloat = 108, thickness: CGFloat = 34
 ctx.saveGState()
-ctx.translateBy(x: 712, y: 300)
-ctx.rotate(by: 18 * .pi / 180)
+ctx.translateBy(x: coinCentre.x, y: coinCentre.y)
+ctx.rotate(by: tiltDegrees * .pi / 180)
 let face = CGRect(x: -rx, y: -ry, width: 2 * rx, height: 2 * ry)
 
 // Soft shadow on the blue
