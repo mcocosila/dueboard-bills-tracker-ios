@@ -18,6 +18,7 @@ Packages/HouseholdCore/        The household core, a Swift package of its own
 CONTEXT.md                     The glossary; the code uses these words
 docs/xcode-cloud.md            How Xcode Cloud builds, tests and uploads to TestFlight
 ci_scripts/                    Scripts Xcode Cloud runs during a build: tests before every archive
+scripts/draw-app-icon.swift    Draws the app icon; rerun with swift scripts/draw-app-icon.swift
 ```
 
 The app depends on the core, never the other way round. Swift enforces this: the core is a separate
