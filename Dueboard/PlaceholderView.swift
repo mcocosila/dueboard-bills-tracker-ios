@@ -17,8 +17,12 @@ struct PlaceholderView: View {
     }
 
     private var title: String {
-        // Billing Months are Gregorian months, whatever calendar the phone is set to.
-        let name = Calendar(identifier: .gregorian).standaloneMonthSymbols[month.month - 1]
+        // Billing Months are Gregorian months, whatever calendar the phone is set to,
+        // named in the phone's language. A calendar made from an identifier has no
+        // locale, and without one the month symbols come out as "M01" to "M12".
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = .autoupdatingCurrent
+        let name = calendar.standaloneMonthSymbols[month.month - 1]
         return "\(name) \(month.year)"
     }
 }
