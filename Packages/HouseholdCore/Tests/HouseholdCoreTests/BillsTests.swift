@@ -78,6 +78,19 @@ struct BillsTests {
         #expect(household.billsList.groups.allSatisfy { $0.bills.isEmpty })
     }
 
+    @Test("a Bill with no Category, or one that is not the Household's, is refused with a readable message",
+          arguments: [nil, UUID()])
+    func billWithoutOneOfTheHouseholdsCategoriesIsRefused(categoryID: UUID?) throws {
+        var household = try Household.open(in: InMemoryHouseholdStore(), clock: .testing)
+        var bill = NewBill.cityPower(in: household)
+        bill.categoryID = categoryID
+
+        let refusal = #expect(throws: BillRefusal.self) { try household.addBill(bill) }
+
+        #expect(refusal?.localizedDescription == "Choose a Category")
+        #expect(household.billsList.groups.allSatisfy { $0.bills.isEmpty })
+    }
+
     @Test("the Bills list groups Bills by Category in Category order, each new Bill last in its Category, with a count")
     func billsListGroupsByCategory() throws {
         var household = try Household.open(in: InMemoryHouseholdStore(), clock: .testing)

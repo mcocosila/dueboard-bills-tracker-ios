@@ -9,7 +9,8 @@ public struct Bill: Hashable, Identifiable, Sendable {
     public let defaultAmount: Decimal?
     /// Recurring when true, Occasional when false.
     public let isRecurring: Bool
-    /// Where the Bill sits among the Bills of its Category, lowest first.
+    /// Orders the Bills of a Category, lowest first. Each new Bill gets one past every
+    /// Bill's, so it lands last in whichever Category it is given.
     public let position: Int
 
     public init(
@@ -42,20 +43,20 @@ public struct DueDay: Hashable, Sendable {
 }
 
 /// Which month a Due Day falls in, relative to the Billing Month.
-public enum DueMonth: String, CaseIterable, Sendable {
+public enum DueMonth: String, Sendable {
     case sameMonth
     case nextMonth
 }
 
-/// What a member fills in to add a Bill.
+/// What is filled in to add a Bill. Nothing is checked until it is added.
 public struct NewBill: Sendable {
     public var name: String
-    public var categoryID: Category.ID
+    public var categoryID: Category.ID?
     public var dueDay: Int
     public var dueMonth: DueMonth
     public var defaultAmount: Decimal?
 
-    public init(name: String, categoryID: Category.ID, dueDay: Int, dueMonth: DueMonth, defaultAmount: Decimal?) {
+    public init(name: String, categoryID: Category.ID?, dueDay: Int, dueMonth: DueMonth, defaultAmount: Decimal?) {
         self.name = name
         self.categoryID = categoryID
         self.dueDay = dueDay

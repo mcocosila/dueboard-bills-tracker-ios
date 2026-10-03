@@ -2,7 +2,7 @@
 /// tests keep it in memory. A store only keeps and returns what it is given:
 /// every rule stays in `Household`.
 public protocol HouseholdStore: AnyObject {
-    /// The Household kept on this phone, or nil when none has been started yet.
+    /// The Household this store keeps, or nil when none has been started yet.
     func load() throws -> HouseholdRecords?
     /// Keeps a Household that has just been started.
     func start(_ household: HouseholdRecords) throws

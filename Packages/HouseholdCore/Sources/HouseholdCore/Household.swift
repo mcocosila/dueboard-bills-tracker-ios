@@ -34,9 +34,12 @@ public struct Household {
     public mutating func addBill(_ new: NewBill) throws -> Bill {
         let name = new.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw BillRefusal.noName }
+        guard let categoryID = new.categoryID, records.categories.contains(where: { $0.id == categoryID }) else {
+            throw BillRefusal.noCategory
+        }
         guard DueDay.days.contains(new.dueDay) else { throw BillRefusal.dueDayOutOfRange }
         let bill = Bill(
-            id: UUID(), name: name, categoryID: new.categoryID,
+            id: UUID(), name: name, categoryID: categoryID,
             dueDay: DueDay(day: new.dueDay, month: new.dueMonth), defaultAmount: new.defaultAmount,
             isRecurring: true, position: (records.bills.map(\.position).max() ?? 0) + 1
         )

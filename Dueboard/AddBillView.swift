@@ -69,7 +69,6 @@ struct AddBillView: View {
     }
 
     private func save() {
-        guard let categoryID else { return }
         do {
             try household.addBill(NewBill(
                 // A day left empty goes to the core as 0, so it is refused like any day outside 1 to 28.

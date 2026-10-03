@@ -23,8 +23,8 @@ final class CoreDataHouseholdStore: HouseholdStore {
             guard let household = try context.fetch(request).first else { return nil }
             let categories = (household.categories as? Set<StoredCategory>) ?? []
             return HouseholdRecords(
-                categories: categories.map(Category.init),
-                bills: categories.flatMap { ($0.bills as? Set<StoredBill>) ?? [] }.map(Bill.init)
+                categories: try categories.map(Category.init),
+                bills: try categories.flatMap { ($0.bills as? Set<StoredBill>) ?? [] }.map(Bill.init)
             )
         }
     }
@@ -50,10 +50,11 @@ final class CoreDataHouseholdStore: HouseholdStore {
         try context.performAndWait {
             let request = StoredCategory.fetchRequest()
             request.predicate = NSPredicate(format: "id == %@", bill.categoryID as CVarArg)
+            guard let category = try context.fetch(request).first else { throw DamagedRecord(entity: "Category") }
             let stored = StoredBill(context: context)
             stored.id = bill.id
             stored.name = bill.name
-            stored.category = try context.fetch(request).first
+            stored.category = category
             stored.dueDay = Int16(bill.dueDay.day)
             stored.dueMonth = bill.dueDay.month.rawValue
             stored.defaultAmount = bill.defaultAmount.map { NSDecimalNumber(decimal: $0) }
@@ -64,19 +65,31 @@ final class CoreDataHouseholdStore: HouseholdStore {
     }
 }
 
+/// A stored record is missing something every record of its kind has. The store
+/// refuses to open rather than guess what it held.
+struct DamagedRecord: LocalizedError {
+    let entity: String
+
+    var errorDescription: String? { "A stored \(entity) is incomplete." }
+}
+
 private extension HouseholdCore.Category {
-    init(_ stored: StoredCategory) {
-        self.init(id: stored.id ?? UUID(), name: stored.name ?? "", position: Int(stored.position))
+    init(_ stored: StoredCategory) throws {
+        guard let id = stored.id, let name = stored.name else { throw DamagedRecord(entity: "Category") }
+        self.init(id: id, name: name, position: Int(stored.position))
     }
 }
 
 private extension Bill {
-    init(_ stored: StoredBill) {
+    init(_ stored: StoredBill) throws {
+        guard let id = stored.id, let name = stored.name, let categoryID = stored.category?.id,
+              let dueMonth = stored.dueMonth.flatMap(DueMonth.init(rawValue:))
+        else { throw DamagedRecord(entity: "Bill") }
         self.init(
-            id: stored.id ?? UUID(),
-            name: stored.name ?? "",
-            categoryID: stored.category?.id ?? UUID(),
-            dueDay: DueDay(day: Int(stored.dueDay), month: DueMonth(rawValue: stored.dueMonth ?? "") ?? .sameMonth),
+            id: id,
+            name: name,
+            categoryID: categoryID,
+            dueDay: DueDay(day: Int(stored.dueDay), month: dueMonth),
             defaultAmount: stored.defaultAmount?.decimalValue,
             isRecurring: stored.isRecurring,
             position: Int(stored.position)
