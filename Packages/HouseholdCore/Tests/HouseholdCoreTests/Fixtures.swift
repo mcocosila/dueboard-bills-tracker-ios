@@ -3,10 +3,11 @@ import Testing
 import HouseholdCore
 
 extension NewBill {
-    /// City Power in the Household's first Category, with no Default Amount.
-    static func cityPower(in household: Household, dueDay: Int = 17) -> NewBill {
+    /// City Power in the Household's first Category, with no Default Amount; due on the 17th of
+    /// the Billing Month itself unless told otherwise.
+    static func cityPower(in household: Household, dueDay: Int = 17, dueMonth: DueMonth = .sameMonth) -> NewBill {
         NewBill(
-            name: "City Power", categoryID: household.categories[0].id, dueDay: dueDay, dueMonth: .sameMonth,
+            name: "City Power", categoryID: household.categories[0].id, dueDay: dueDay, dueMonth: dueMonth,
             defaultAmount: nil
         )
     }
@@ -55,5 +56,10 @@ extension WallClock {
     /// Noon on September 15, 2026 in New York.
     static var testing: WallClock {
         .fixed(Date(timeIntervalSince1970: 1_789_488_000), in: TimeZone(identifier: "America/New_York")!)
+    }
+
+    /// A clock stopped at `moment`, written as ISO 8601 in UTC, in the time zone named `timeZone`.
+    static func at(_ moment: String, in timeZone: String = "America/New_York") -> WallClock {
+        .fixed(ISO8601DateFormatter().date(from: moment)!, in: TimeZone(identifier: timeZone)!)
     }
 }

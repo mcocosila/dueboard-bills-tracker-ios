@@ -1,5 +1,5 @@
-/// A Billing Month as the Month board shows it: its Dues grouped by Category, and
-/// its Unpaid Remaining.
+/// A Billing Month as the Month board shows it: its Dues grouped by Category, each
+/// with its state as of the day the board was made, and its Unpaid Remaining.
 public struct MonthBoard: Sendable {
     public struct Group: Identifiable, Sendable {
         public let category: Category
@@ -17,12 +17,26 @@ public struct MonthBoard: Sendable {
     /// The month after this one, or nil when it cannot be opened yet.
     public let next: BillingMonth?
     public let unpaidRemaining: UnpaidRemaining
+    /// The day the board was made, in the clock's time zone.
+    private let today: DueDate
+    /// The last day that counts as Due Soon.
+    private let dueSoonThrough: DueDate
 
     /// Every Due of the month, in board order.
     public var dues: [Due] { groups.flatMap(\.dues) }
 
-    init(month: BillingMonth, dues: [Due], categories: [Category], latestOpenable: BillingMonth) {
+    /// Paid, Due Soon or Overdue, or nil when nothing needs saying about `due`.
+    public func state(of due: Due) -> DueState? {
+        due.state(on: today, dueSoonThrough: dueSoonThrough)
+    }
+
+    init(
+        month: BillingMonth, dues: [Due], categories: [Category], latestOpenable: BillingMonth, today: DueDate,
+        dueSoonThrough: DueDate
+    ) {
         self.month = month
+        self.today = today
+        self.dueSoonThrough = dueSoonThrough
         previous = month > .earliest ? month.shifted(by: -1) : nil
         next = month < latestOpenable ? month.shifted(by: 1) : nil
         unpaidRemaining = UnpaidRemaining(of: dues)
