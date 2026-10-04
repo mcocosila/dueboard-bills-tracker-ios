@@ -5,7 +5,9 @@ import SwiftUI
 /// by Category, with buttons to step to the previous and next month. It starts on
 /// the current Billing Month; the household core opens each month the first time
 /// it is shown. Each Due takes an Amount and is marked Paid, or Edited, from its row,
-/// and its Due Date is coloured by whether it is Paid, Due Soon or Overdue.
+/// and its Due Date is coloured by whether it is Paid, Due Soon or Overdue. A Bill the
+/// month has no Due for is added from the Add menu; a Due that is not Paid is removed
+/// by swiping its row.
 struct MonthView: View {
     @Binding var household: Household
     @Environment(\.scenePhase) private var scenePhase
@@ -15,6 +17,8 @@ struct MonthView: View {
     @State private var monthRefusal: String?
     /// Why the last change to a Due was refused, shown until dismissed.
     @State private var dueRefusal: String?
+    /// The Due waiting for its removal to be confirmed.
+    @State private var dueBeingRemoved: Due?
     @FocusState private var amountBeingEntered: Due.ID?
     /// Who marks Dues Paid on this phone, until sharing records the iCloud name instead.
     @AppStorage("memberName") private var memberName = ""
@@ -52,6 +56,11 @@ struct MonthView: View {
                                 },
                                 edit: { change { try $0.undoPaid(due.id) } }
                             )
+                            .swipeActions {
+                                if board?.canRemove(due) == true {
+                                    Button("Remove", systemImage: "trash", role: .destructive) { dueBeingRemoved = due }
+                                }
+                            }
                         }
                     }
                 }
@@ -63,7 +72,9 @@ struct MonthView: View {
                 } else if board?.groups.isEmpty == true {
                     ContentUnavailableView(
                         "No Dues", systemImage: "calendar",
-                        description: Text("Add Bills on the Bills tab and their Dues show up here.")
+                        description: Text(board?.billsToAdd.isEmpty == false
+                            ? "Add a Bill to this month with the + button, or add Bills on the Bills tab."
+                            : "Add Bills on the Bills tab and their Dues show up here.")
                     )
                 }
             }
@@ -77,6 +88,17 @@ struct MonthView: View {
                     Button("Done") { amountBeingEntered = nil }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    if let board, !board.billsToAdd.isEmpty {
+                        Menu("Add a Bill to this month", systemImage: "plus") {
+                            ForEach(board.billsToAdd) { group in
+                                Section(group.category.name) {
+                                    ForEach(group.bills) { bill in
+                                        Button(bill.name) { change { try $0.addDue(of: bill.id, to: month) } }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Button("Previous month", systemImage: "chevron.left") { board?.previous.map { month = $0 } }
                         .disabled(board?.previous == nil)
                     Button("Next month", systemImage: "chevron.right") { board?.next.map { month = $0 } }
@@ -90,6 +112,15 @@ struct MonthView: View {
             // the app on a later day shows them as of that day.
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { showMonth() }
+            }
+            .confirmationDialog(
+                "Remove \(dueBeingRemoved?.name ?? "") from \(month.title)?",
+                isPresented: Binding(get: { dueBeingRemoved != nil }, set: { if !$0 { dueBeingRemoved = nil } }),
+                titleVisibility: .visible, presenting: dueBeingRemoved
+            ) { due in
+                Button("Remove", role: .destructive) { change { try $0.removeDue(due.id) } }
+            } message: { _ in
+                Text("It can be added back from the Add menu.")
             }
             .alert(
                 "Not changed", isPresented: Binding(get: { dueRefusal != nil }, set: { if !$0 { dueRefusal = nil } })

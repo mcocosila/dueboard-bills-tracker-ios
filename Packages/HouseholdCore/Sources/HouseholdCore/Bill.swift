@@ -1,21 +1,24 @@
 import Foundation
 
-/// Something paid from a Billing Month, described once (see CONTEXT.md).
+/// Something paid from a Billing Month, described once (see CONTEXT.md). Editing it
+/// changes only the Dues generated afterwards.
 public struct Bill: Hashable, Identifiable, Sendable {
     public let id: UUID
-    public let name: String
-    public let categoryID: Category.ID
-    public let dueDay: DueDay
-    public let defaultAmount: Decimal?
+    public internal(set) var name: String
+    public internal(set) var categoryID: Category.ID
+    public internal(set) var dueDay: DueDay
+    public internal(set) var defaultAmount: Decimal?
     /// Recurring when true, Occasional when false.
-    public let isRecurring: Bool
+    public internal(set) var isRecurring: Bool
+    /// A Retired Bill gets no Dues, generated or added by hand, until it is reactivated.
+    public internal(set) var isRetired: Bool
     /// Orders the Bills of a Category, lowest first. Each new Bill gets one past every
     /// Bill's, so it lands last in whichever Category it is given.
     public let position: Int
 
     public init(
         id: UUID, name: String, categoryID: Category.ID, dueDay: DueDay, defaultAmount: Decimal?,
-        isRecurring: Bool, position: Int
+        isRecurring: Bool, isRetired: Bool = false, position: Int
     ) {
         self.id = id
         self.name = name
@@ -23,8 +26,12 @@ public struct Bill: Hashable, Identifiable, Sendable {
         self.dueDay = dueDay
         self.defaultAmount = defaultAmount
         self.isRecurring = isRecurring
+        self.isRetired = isRetired
         self.position = position
     }
+
+    /// Whether opening a Billing Month generates a Due for this Bill: Recurring and not Retired.
+    var isGenerated: Bool { isRecurring && !isRetired }
 }
 
 /// The day number a Bill is due on, in the Billing Month itself or the month after.
@@ -53,19 +60,33 @@ public enum DueMonth: String, Sendable {
     case nextMonth
 }
 
-/// What is filled in to add a Bill. Nothing is checked until it is added.
+/// What is filled in to add or edit a Bill. Nothing is checked until it is saved.
 public struct NewBill: Sendable {
     public var name: String
     public var categoryID: Category.ID?
     public var dueDay: Int
     public var dueMonth: DueMonth
     public var defaultAmount: Decimal?
+    /// Recurring when true, Occasional when false.
+    public var isRecurring: Bool
 
-    public init(name: String, categoryID: Category.ID?, dueDay: Int, dueMonth: DueMonth, defaultAmount: Decimal?) {
+    public init(
+        name: String, categoryID: Category.ID?, dueDay: Int, dueMonth: DueMonth, defaultAmount: Decimal?,
+        isRecurring: Bool = true
+    ) {
         self.name = name
         self.categoryID = categoryID
         self.dueDay = dueDay
         self.dueMonth = dueMonth
         self.defaultAmount = defaultAmount
+        self.isRecurring = isRecurring
+    }
+
+    /// The Bill as it is now, to be edited.
+    public init(_ bill: Bill) {
+        self.init(
+            name: bill.name, categoryID: bill.categoryID, dueDay: bill.dueDay.day, dueMonth: bill.dueDay.month,
+            defaultAmount: bill.defaultAmount, isRecurring: bill.isRecurring
+        )
     }
 }
