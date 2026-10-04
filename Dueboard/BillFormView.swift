@@ -1,9 +1,10 @@
 import HouseholdCore
 import SwiftUI
 
-/// The form for adding a Bill, or editing one and Retiring or reactivating it. The
-/// household core decides whether it can be saved; a refusal is shown under the form
-/// and the form stays open.
+/// The form for adding a Bill, or editing one and Retiring or reactivating it. Retired
+/// is saved with the rest of the form, so Cancel leaves it as it was. The household core
+/// decides whether it can be saved; a refusal is shown under the form and the form
+/// stays open.
 struct BillFormView: View {
     @Binding var household: Household
     /// The Bill being edited, or nil when a Bill is being added.
@@ -16,6 +17,7 @@ struct BillFormView: View {
     @State private var dueMonth: DueMonth
     @State private var defaultAmount: Decimal?
     @State private var isRecurring: Bool
+    @State private var isRetired: Bool
     @State private var refusal: String?
 
     init(household: Binding<Household>, editing bill: Bill? = nil) {
@@ -28,6 +30,7 @@ struct BillFormView: View {
         _dueMonth = State(initialValue: details?.dueMonth ?? .sameMonth)
         _defaultAmount = State(initialValue: details?.defaultAmount)
         _isRecurring = State(initialValue: details?.isRecurring ?? true)
+        _isRetired = State(initialValue: bill?.isRetired ?? false)
     }
 
     var body: some View {
@@ -77,17 +80,13 @@ struct BillFormView: View {
                         }
                     }
                 }
-                if let bill {
+                if bill != nil {
                     Section {
-                        if bill.isRetired {
-                            Button("Reactivate") { change { try $0.reactivateBill(bill.id) } }
-                        } else {
-                            Button("Retire", role: .destructive) { change { try $0.retireBill(bill.id) } }
-                        }
+                        Toggle("Retired", isOn: $isRetired)
                     } footer: {
-                        Text(bill.isRetired
-                            ? "Billing Months opened from now on get its Dues again."
-                            : "A Retired Bill gets no Dues and cannot be added to a month; its past Dues remain.")
+                        Text(isRetired
+                            ? "A Retired Bill gets no Dues and cannot be added to a month; its past Dues remain."
+                            : "Turn on when the Bill is no longer paid at all.")
                     }
                 }
             }
@@ -110,17 +109,15 @@ struct BillFormView: View {
             name: name, categoryID: categoryID, dueDay: dueDay ?? 0, dueMonth: dueMonth,
             defaultAmount: defaultAmount, isRecurring: isRecurring
         )
-        if let bill {
-            change { try $0.editBill(bill.id, to: details) }
-        } else {
-            change { try $0.addBill(details) }
-        }
-    }
-
-    /// Sends a change to the household core and closes the form, or shows why it was refused.
-    private func change(_ command: (inout Household) throws -> Void) {
         do {
-            try command(&household)
+            if let bill {
+                try household.editBill(bill.id, to: details)
+                if isRetired != bill.isRetired {
+                    try isRetired ? household.retireBill(bill.id) : household.reactivateBill(bill.id)
+                }
+            } else {
+                try household.addBill(details)
+            }
             dismiss()
         } catch {
             refusal = error.localizedDescription
