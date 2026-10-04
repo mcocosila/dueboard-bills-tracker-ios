@@ -83,7 +83,7 @@ final class CoreDataHouseholdStore: HouseholdStore {
                     stored.name = due.name
                     stored.position = Int64(due.position)
                     stored.dueDate = due.dueDate.stored
-                    stored.amount = due.amount.map { NSDecimalNumber(decimal: $0) }
+                    stored.keep(amountAndPaidOf: due)
                     stored.bill = bill
                     stored.category = category
                     stored.billingMonth = storedMonth
@@ -92,6 +92,22 @@ final class CoreDataHouseholdStore: HouseholdStore {
             } catch {
                 // All or nothing: a month left half made in the context would be saved by the next
                 // command, and the month would then stay open with only some of its Dues.
+                context.rollback()
+                throw error
+            }
+        }
+    }
+
+    func update(_ due: Due) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                let request = StoredDue.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", due.id as CVarArg)
+                guard let stored = try context.fetch(request).first else { throw DamagedRecord(entity: "Due") }
+                stored.keep(amountAndPaidOf: due)
+                try context.save()
+            } catch {
                 context.rollback()
                 throw error
             }
@@ -169,8 +185,18 @@ private extension Due {
             categoryID: categoryID,
             position: Int(stored.position),
             dueDate: dueDate,
-            amount: stored.amount?.decimalValue
+            amount: stored.amount?.decimalValue,
+            paid: stored.paidAt.map { Due.Paid(at: $0, by: stored.paidBy) }
         )
+    }
+}
+
+private extension StoredDue {
+    /// Takes the Due's Amount and Paid, the parts of a Due that change after it is generated.
+    func keep(amountAndPaidOf due: Due) {
+        amount = due.amount.map { NSDecimalNumber(decimal: $0) }
+        paidAt = due.paid?.at
+        paidBy = due.paid?.by
     }
 }
 
