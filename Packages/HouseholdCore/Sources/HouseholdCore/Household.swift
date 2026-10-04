@@ -35,7 +35,7 @@ public struct Household {
         let details = try checked(new)
         let bill = Bill(
             id: UUID(), name: details.name, categoryID: details.categoryID, dueDay: details.dueDay,
-            defaultAmount: new.defaultAmount, isRecurring: new.isRecurring,
+            defaultAmount: new.defaultAmount, isRecurring: new.isRecurring, isCardPaid: new.isCardPaid,
             position: (records.bills.map(\.position).max() ?? 0) + 1
         )
         try store.insert(bill)
@@ -57,6 +57,7 @@ public struct Household {
             bill.dueDay = checked.dueDay
             bill.defaultAmount = details.defaultAmount
             bill.isRecurring = details.isRecurring
+            bill.isCardPaid = details.isCardPaid
         }
     }
 
@@ -184,14 +185,22 @@ public struct Household {
         }
     }
 
-    /// Marks a Due Paid by `member`, now. A Due already Paid keeps who marked it and when.
+    /// Marks a Due Paid by `member`, now. On a credit card Due, `paidAmount` is what was paid
+    /// when it is less than the Amount, leaving the rest as Unpaid Balance; nil means the whole
+    /// Amount, and other Dues are always paid in full. A Due already Paid keeps who marked it,
+    /// when and its Paid Amount: only Edit and marking Paid again change them.
     @discardableResult
-    public mutating func markPaid(_ dueID: Due.ID, by member: String) throws -> Due {
+    public mutating func markPaid(_ dueID: Due.ID, paying paidAmount: Decimal? = nil, by member: String) throws -> Due {
         let now = clock.now
-        return try changeDue(dueID) { due in due.markPaid(at: now, by: member) }
+        let categories = records.categories
+        return try changeDue(dueID) { due in
+            guard (paidAmount ?? 0) >= 0 else { throw DueRefusal.negativePaidAmount }
+            due.markPaid(at: now, by: member, paying: due.isCreditCard(among: categories) ? paidAmount : nil)
+        }
     }
 
-    /// Edit: undoes Paid, so the Due is owed again and its Amount can be changed.
+    /// Edit: undoes Paid, taking its Paid Amount with it, so the Due is owed again and its
+    /// Amount can be changed.
     @discardableResult
     public mutating func undoPaid(_ dueID: Due.ID) throws -> Due {
         try changeDue(dueID) { due in due.paid = nil }

@@ -64,8 +64,8 @@ private struct CountedHeader: View {
     }
 }
 
-/// One Bill: its name, its Due Day, whether it is Occasional, and its Default Amount
-/// when it has one.
+/// One Bill: its name, its Due Day, whether it is Occasional or Card-Paid, and its Default
+/// Amount when it has one.
 private struct BillRow: View {
     let bill: Bill
 
@@ -73,7 +73,7 @@ private struct BillRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(bill.name)
-                Text(bill.isRecurring ? dueDayLabel : "\(dueDayLabel) · Occasional")
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -83,6 +83,13 @@ private struct BillRow: View {
                     .monospacedDigit()
             }
         }
+    }
+
+    /// "17th · Occasional · Card-Paid": the Due Day, then whichever of Occasional and Card-Paid
+    /// the Bill is.
+    private var subtitle: String {
+        let tags: [String?] = [bill.isRecurring ? nil : "Occasional", bill.isCardPaid ? "Card-Paid" : nil]
+        return ([dueDayLabel] + tags.compactMap { $0 }).joined(separator: " · ")
     }
 
     /// The Due Day as a person says it: "17th", or "1st of next month".

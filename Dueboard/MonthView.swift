@@ -1,11 +1,12 @@
 import HouseholdCore
 import SwiftUI
 
-/// The Month board: one Billing Month's Unpaid Remaining and its Dues, grouped
-/// by Category, with buttons to step to the previous and next month. It starts on
-/// the current Billing Month; the household core opens each month the first time
-/// it is shown. Each Due takes an Amount and is marked Paid, or Edited, from its row,
-/// and its Due Date is coloured by whether it is Paid, Due Soon or Overdue. A Bill the
+/// The Month board: one Billing Month's Unpaid Remaining, the Unpaid Balance warning
+/// under it, and its Dues, grouped by Category, with buttons to step to the previous and
+/// next month. It starts on the current Billing Month; the household core opens each
+/// month the first time it is shown. Each Due takes an Amount, and a credit card Due a
+/// Paid Amount, and is marked Paid, or Edited, from its row, and its Due Date is coloured
+/// by whether it is Paid, Due Soon or Overdue. A Bill the
 /// month has no Due for is added from the Add menu; a Due that is not Paid is removed
 /// by swiping its row.
 struct MonthView: View {
@@ -19,7 +20,7 @@ struct MonthView: View {
     @State private var dueRefusal: String?
     /// The Due waiting for its removal to be confirmed.
     @State private var dueBeingRemoved: Due?
-    @FocusState private var amountBeingEntered: Due.ID?
+    @FocusState private var fieldBeingEntered: DueField?
     /// Who marks Dues Paid on this phone, until sharing records the iCloud name instead.
     @AppStorage("memberName") private var memberName = ""
     @State private var askingForName = false
@@ -37,30 +38,14 @@ struct MonthView: View {
             List {
                 if let board, !board.groups.isEmpty {
                     UnpaidRemainingRow(remaining: board.unpaidRemaining)
+                    if let unpaidBalance = board.unpaidBalance {
+                        UnpaidBalanceRow(balance: unpaidBalance)
+                    }
                 }
-                ForEach(board?.groups ?? []) { group in
-                    Section(group.category.name) {
-                        ForEach(group.dues) { due in
-                            DueRow(
-                                due: due, state: board?.state(of: due), focus: $amountBeingEntered,
-                                enterAmount: { amount in
-                                    withMemberName { name in change { try $0.enterAmount(amount, on: due.id, by: name) } }
-                                },
-                                markPaid: { typed in
-                                    withMemberName { name in
-                                        change {
-                                            if typed != due.amount { try $0.enterAmount(typed, on: due.id, by: name) }
-                                            try $0.markPaid(due.id, by: name)
-                                        }
-                                    }
-                                },
-                                edit: { change { try $0.undoPaid(due.id) } }
-                            )
-                            .swipeActions {
-                                if board?.canRemove(due) == true {
-                                    Button("Remove", systemImage: "trash", role: .destructive) { dueBeingRemoved = due }
-                                }
-                            }
+                if let board {
+                    ForEach(board.groups) { group in
+                        Section(group.category.name) {
+                            ForEach(group.dues) { due in dueRow(due, on: board) }
                         }
                     }
                 }
@@ -85,7 +70,7 @@ struct MonthView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { amountBeingEntered = nil }
+                    Button("Done") { fieldBeingEntered = nil }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if let board, !board.billsToAdd.isEmpty {
@@ -146,6 +131,25 @@ struct MonthView: View {
         }
     }
 
+    /// The row of `due`, which sends its changes to the household core, with a swipe to remove
+    /// it while it is not Paid.
+    private func dueRow(_ due: Due, on board: MonthBoard) -> some View {
+        DueRow(
+            due: due, state: board.state(of: due), takesPaidAmount: board.takesPaidAmount(due),
+            focus: $fieldBeingEntered,
+            enterAmount: { amount in
+                withMemberName { name in change { try $0.enterAmount(amount, on: due.id, by: name) } }
+            },
+            markPaid: { typed, paidAmount in markPaid(due, typed: typed, paying: paidAmount) },
+            edit: { change { try $0.undoPaid(due.id) } }
+        )
+        .swipeActions {
+            if board.canRemove(due) {
+                Button("Remove", systemImage: "trash", role: .destructive) { dueBeingRemoved = due }
+            }
+        }
+    }
+
     /// Opens the month and shows its board, or why it could not be opened.
     private func showMonth() {
         do {
@@ -165,6 +169,25 @@ struct MonthView: View {
             dueRefusal = error.localizedDescription
         }
         board = try? household.openBillingMonth(month)
+    }
+
+    /// Marks `due` Paid, first entering the Amount typed when it changed, and paying the Paid
+    /// Amount typed. A Paid Amount that is not a number is refused before anything changes.
+    private func markPaid(_ due: Due, typed: Decimal?, paying typedPaidAmount: TypedPaidAmount) {
+        let paidAmount: Decimal?
+        switch typedPaidAmount {
+        case .whole: paidAmount = nil
+        case .part(let amount): paidAmount = amount
+        case .notANumber:
+            dueRefusal = "Paid Amount must be a number, or empty when the whole Amount was paid"
+            return
+        }
+        withMemberName { name in
+            change {
+                if typed != due.amount { try $0.enterAmount(typed, on: due.id, by: name) }
+                try $0.markPaid(due.id, paying: paidAmount, by: name)
+            }
+        }
     }
 
     /// Runs `action` with the name kept on this phone, asking for it first the one time
@@ -206,19 +229,51 @@ private struct UnpaidRemainingRow: View {
     }
 }
 
+/// The Unpaid Balance warning: what the credit cards still hold this month.
+private struct UnpaidBalanceRow: View {
+    let balance: Decimal
+
+    var body: some View {
+        LabeledContent {
+            Text(balance, format: .currency(code: currencyCode))
+                .foregroundStyle(Color(.dueSoon))
+                .monospacedDigit()
+        } label: {
+            Label {
+                Text("Unpaid Balance")
+                Text("Left on credit cards")
+            } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
+            .foregroundStyle(Color(.dueSoon))
+        }
+    }
+}
+
+/// A field on a Due's row, so the keyboard's Done button can leave whichever is being typed in.
+private enum DueField: Hashable {
+    case amount(Due.ID)
+    case paidAmount(Due.ID)
+}
+
 /// One Due: its name, its Due Date coloured by its state with who marked it Paid or
 /// whether it is Due Soon or Overdue, and its Amount. A Due not Paid takes an Amount and
-/// has a Paid button; a Paid Due's Amount is locked behind Edit.
+/// has a Paid button; a credit card Due also takes a Paid Amount, left empty when the whole
+/// Amount is paid. A Paid Due's Amount is locked behind Edit.
 private struct DueRow: View {
     let due: Due
     let state: DueState?
-    let focus: FocusState<Due.ID?>.Binding
+    /// Whether the Due is a credit card Due, which takes a Paid Amount.
+    let takesPaidAmount: Bool
+    let focus: FocusState<DueField?>.Binding
     /// Hands on the Amount typed, once the field is left.
     let enterAmount: (Decimal?) -> Void
-    /// Marks the Due Paid, handing on the Amount typed so it is not lost to the tap.
-    let markPaid: (Decimal?) -> Void
+    /// Marks the Due Paid, handing on the Amount typed so it is not lost to the tap, and the
+    /// Paid Amount typed.
+    let markPaid: (Decimal?, TypedPaidAmount) -> Void
     let edit: () -> Void
     @State private var text = ""
+    @State private var paidAmountText = ""
 
     var body: some View {
         HStack {
@@ -227,11 +282,11 @@ private struct DueRow: View {
                 // One Text, so a long line wraps as a sentence.
                 Group {
                     if let paid = due.paid {
-                        Text("\(dueDate) · \(paid.summary)")
+                        Text("\(dueDate) · \(paid.summary(of: due))")
                     } else if let label = state?.label {
-                        Text("\(dueDate) · \(label)")
+                        Text("\(dueDate) · \(label)\(cardPaid)")
                     } else {
-                        dueDate
+                        Text("\(dueDate)\(cardPaid)")
                     }
                 }
                 .font(.subheadline)
@@ -250,24 +305,37 @@ private struct DueRow: View {
                 Button("Edit", action: edit)
                     .buttonStyle(.bordered)
             } else {
-                TextField("Amount", text: $text)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .monospacedDigit()
-                    .frame(maxWidth: 110)
-                    .focused(focus, equals: due.id)
-                Button("Paid", systemImage: "checkmark.circle") { markPaid(typedAmount) }
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
+                VStack(alignment: .trailing, spacing: 4) {
+                    TextField("Amount", text: $text)
+                        .focused(focus, equals: .amount(due.id))
+                    if takesPaidAmount {
+                        TextField("Paid in full", text: $paidAmountText)
+                            .focused(focus, equals: .paidAmount(due.id))
+                            .accessibilityLabel("Paid Amount")
+                    }
+                }
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
+                .frame(maxWidth: 110)
+                Button("Paid", systemImage: "checkmark.circle") {
+                    markPaid(typedAmount, TypedPaidAmount(paidAmountText))
+                }
+                .labelStyle(.iconOnly)
+                .font(.title2)
             }
         }
         // Each button acts on its own, rather than a tap anywhere on the row pressing them all.
         .buttonStyle(.borderless)
         .onAppear { text = due.amountText }
-        // An accepted Amount arrives with the changed Due.
-        .onChange(of: due) { text = due.amountText }
+        // An accepted Amount arrives with the changed Due. The Paid Amount is typed afresh each
+        // time the Due is marked Paid.
+        .onChange(of: due) {
+            text = due.amountText
+            if due.paid != nil { paidAmountText = "" }
+        }
         .onChange(of: focus.wrappedValue) { left, _ in
-            guard left == due.id, due.paid == nil, typedAmount != due.amount else { return }
+            guard left == .amount(due.id), due.paid == nil, typedAmount != due.amount else { return }
             enterAmount(typedAmount)
             // A refused Amount leaves the Due as it was, so the field goes back to it.
             text = due.amountText
@@ -281,11 +349,36 @@ private struct DueRow: View {
             .foregroundStyle(state.map { AnyShapeStyle($0.colour) } ?? AnyShapeStyle(.secondary))
     }
 
+    /// " · Card-Paid" on a Due left out of Unpaid Remaining for being Card-Paid, so its Amount
+    /// is not taken for money still to leave the bank.
+    private var cardPaid: String {
+        due.isCardPaid ? " · Card-Paid" : ""
+    }
+
     /// The Amount in the field: nil when it is empty, the Due's own when it is not a number.
     private var typedAmount: Decimal? {
         let typed = text.trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty else { return nil }
         return (try? Decimal(typed, format: .number)) ?? due.amount
+    }
+}
+
+/// What was typed in a credit card Due's Paid Amount field.
+private enum TypedPaidAmount {
+    /// Left empty: the whole Amount was paid.
+    case whole
+    case part(Decimal)
+    case notANumber
+
+    init(_ text: String) {
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        if typed.isEmpty {
+            self = .whole
+        } else if let amount = try? Decimal(typed, format: .number) {
+            self = .part(amount)
+        } else {
+            self = .notANumber
+        }
     }
 }
 
@@ -318,10 +411,19 @@ private extension DueState {
 }
 
 private extension Due.Paid {
-    /// "Paid Oct 4 by Mircea", or "Paid Oct 4" for a Due Paid from birth.
-    var summary: String {
+    /// "Paid Oct 4 by Mircea", or "Paid Oct 4" for a Due Paid from birth. A credit card Due
+    /// paid for less than its Amount says how much, and what is left on the card: "Paid
+    /// $1,000.00 of $5,000.00 Oct 4 by Mircea · $4,000.00 unpaid".
+    func summary(of due: Due) -> String {
         let day = at.formatted(dayFormat)
-        return by.map { "Paid \(day) by \($0)" } ?? "Paid \(day)"
+        let money = Decimal.FormatStyle.Currency(code: currencyCode)
+        var paid = "Paid"
+        if let paidAmount, let amount = due.amount {
+            paid += " \(paidAmount.formatted(money)) of \(amount.formatted(money))"
+        }
+        let summary = by.map { "\(paid) \(day) by \($0)" } ?? "\(paid) \(day)"
+        guard due.unpaidBalance > 0 else { return summary }
+        return "\(summary) · \(due.unpaidBalance.formatted(money)) unpaid"
     }
 }
 
@@ -366,6 +468,10 @@ private extension DueDate {
         _ = try? household.addBill(NewBill(
             name: "Riverside School", categoryID: household.categories[1].id, dueDay: 1, dueMonth: .nextMonth,
             defaultAmount: 450
+        ))
+        _ = try? household.addBill(NewBill(
+            name: "Visa", categoryID: household.categories[2].id, dueDay: 25, dueMonth: .sameMonth,
+            defaultAmount: nil
         ))
         return household
     }()

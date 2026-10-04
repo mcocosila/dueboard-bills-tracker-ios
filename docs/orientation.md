@@ -153,14 +153,15 @@ public struct Household {
     public mutating func addDue(of billID: Bill.ID, to month: BillingMonth) throws -> Due
     public mutating func removeDue(_ dueID: Due.ID) throws
     public mutating func enterAmount(_ amount: Decimal?, on dueID: Due.ID, by member: String) throws -> Due
-    public mutating func markPaid(_ dueID: Due.ID, by member: String) throws -> Due
+    public mutating func markPaid(_ dueID: Due.ID, paying paidAmount: Decimal? = nil, by member: String) throws -> Due
     public mutating func undoPaid(_ dueID: Due.ID) throws -> Due   // the Edit button
 }
 ```
 
 The `MonthBoard` that `openBillingMonth` returns also answers `state(of: due)`: Paid, Due Soon, Overdue,
-or nil when nothing needs saying, and lists the Bills that can be added to the month by hand
-(`billsToAdd`). The state is derived as of the day the board was made, never stored, so
+or nil when nothing needs saying, and `takesPaidAmount(due)`: only a Due in the Credit Cards Category does. It
+holds the month's Unpaid Remaining and its Unpaid Balance (nil when the cards hold nothing, so no warning
+shows), and lists the Bills that can be added to the month by hand (`billsToAdd`). The state is derived as of the day the board was made, never stored, so
 the Month board asks for a fresh board when the app comes back to the foreground.
 
 A command that breaks a rule throws a refusal, such as `BillRefusal.dueDayOutOfRange`, whose
@@ -180,7 +181,8 @@ A change to the Core Data model goes in a new model version, never into an exist
 the store already on a phone only when the app still ships the model that store was made with. In Xcode,
 select `Dueboard.xcdatamodeld`, then Editor > Add Model Version, make the change in the new version and set
 it as current in the File inspector. `Dueboard 2` added Billing Month and Due; `Dueboard 3` added when and by
-whom a Due was marked Paid; `Dueboard 4` added whether a Bill is Retired.
+whom a Due was marked Paid; `Dueboard 4` added whether a Bill is Retired; `Dueboard 5` added whether a Bill
+and its Dues are Card-Paid, and a Due's Paid Amount.
 
 **The clock is injected.** The core never asks the device for the date or the time zone itself. Whoever
 creates a `Household` hands it a `WallClock`, which supplies `now` and the `timeZone`:
