@@ -146,6 +146,9 @@ public struct Household {
     public mutating func addBill(_ new: NewBill) throws -> Bill
     public var currentBillingMonth: BillingMonth { get }
     public mutating func openBillingMonth(_ month: BillingMonth) throws -> MonthBoard
+    public mutating func enterAmount(_ amount: Decimal?, on dueID: Due.ID, by member: String) throws -> Due
+    public mutating func markPaid(_ dueID: Due.ID, by member: String) throws -> Due
+    public mutating func undoPaid(_ dueID: Due.ID) throws -> Due   // the Edit button
 }
 ```
 
@@ -165,7 +168,8 @@ sync ticket can switch the container without reshaping the model.
 A change to the Core Data model goes in a new model version, never into an existing one: Core Data upgrades
 the store already on a phone only when the app still ships the model that store was made with. In Xcode,
 select `Dueboard.xcdatamodeld`, then Editor > Add Model Version, make the change in the new version and set
-it as current in the File inspector. `Dueboard 2` added Billing Month and Due.
+it as current in the File inspector. `Dueboard 2` added Billing Month and Due; `Dueboard 3` added when and by
+whom a Due was marked Paid.
 
 **The clock is injected.** The core never asks the device for the date or the time zone itself. Whoever
 creates a `Household` hands it a `WallClock`, which supplies `now` and the `timeZone`:
@@ -181,8 +185,12 @@ what comes back, the same way a screen would. It never reads private state or st
 core stores things can change without breaking a test. `import HouseholdCore` (not
 `@testable import`) keeps tests honest: they can only see what is `public`.
 
-**What comes next**: later tickets grow this same interface. Commands such as open a Billing Month or mark
-a Due Paid; outputs such as the Month board and the reminder plan. CloudKit sync and notifications plug in
+**Who marks Paid** is a name the core is handed, not one it looks up. Until sharing exists, the app asks for
+it the first time a Due is marked Paid and keeps it on the phone (`MonthView.swift`); sharing will hand the
+member's iCloud name instead.
+
+**What comes next**: later tickets grow this same interface, with commands such as add or remove a Due and
+outputs such as the reminder plan. CloudKit sync and notifications plug in
 as adapters in the app, outside the core.
 
 **`public`**: Swift hides everything in a module from other modules unless it is marked `public`. The

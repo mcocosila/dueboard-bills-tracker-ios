@@ -68,7 +68,8 @@ public struct Household {
         guard month <= latestOpenableMonth else { throw BillingMonthRefusal.tooFarAhead }
         let recurring = records.bills.filter(\.isRecurring)
         if !records.billingMonths.contains(month), !recurring.isEmpty {
-            let dues = recurring.map { Due(generatedFrom: $0, in: month) }
+            let now = clock.now
+            let dues = recurring.map { Due(generatedFrom: $0, in: month, at: now) }
             try store.open(month, with: dues)
             records.billingMonths.insert(month)
             records.dues.append(contentsOf: dues)
@@ -77,6 +78,50 @@ public struct Household {
             month: month, dues: records.dues.filter { $0.billingMonth == month }, categories: categories,
             latestOpenable: latestOpenableMonth
         )
+    }
+
+    /// Enters or changes the Amount of a Due that is not Paid, or clears it with nil,
+    /// leaving the Bill's Default Amount alone. An Amount of zero leaves nothing to pay,
+    /// so it also marks the Due Paid by `member`.
+    @discardableResult
+    public mutating func enterAmount(_ amount: Decimal?, on dueID: Due.ID, by member: String) throws -> Due {
+        let now = clock.now
+        return try changeDue(dueID) { due in
+            guard due.paid == nil else { throw DueRefusal.paidNotEditable }
+            guard (amount ?? 0) >= 0 else { throw DueRefusal.negativeAmount }
+            due.amount = amount
+            if amount == 0 {
+                due.paid = Due.Paid(at: now, by: member)
+            }
+        }
+    }
+
+    /// Marks a Due Paid by `member`, now. A Due already Paid keeps who marked it and when.
+    @discardableResult
+    public mutating func markPaid(_ dueID: Due.ID, by member: String) throws -> Due {
+        let now = clock.now
+        return try changeDue(dueID) { due in
+            if due.paid == nil {
+                due.paid = Due.Paid(at: now, by: member)
+            }
+        }
+    }
+
+    /// Edit: undoes Paid, so the Due is owed again and its Amount can be changed.
+    @discardableResult
+    public mutating func undoPaid(_ dueID: Due.ID) throws -> Due {
+        try changeDue(dueID) { due in due.paid = nil }
+    }
+
+    /// Applies `change` to the Due and keeps the result, or keeps nothing when
+    /// `change` throws.
+    private mutating func changeDue(_ dueID: Due.ID, _ change: (inout Due) throws -> Void) throws -> Due {
+        guard let index = records.dues.firstIndex(where: { $0.id == dueID }) else { throw DueRefusal.noSuchDue }
+        var due = records.dues[index]
+        try change(&due)
+        try store.update(due)
+        records.dues[index] = due
+        return due
     }
 
     /// The Billing Month that "now" falls in, in the clock's time zone.

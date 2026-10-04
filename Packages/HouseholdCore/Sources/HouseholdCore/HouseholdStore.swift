@@ -11,6 +11,8 @@ public protocol HouseholdStore: AnyObject {
     /// Keeps a Billing Month that has just been opened, with the Dues it was
     /// opened with, all or nothing.
     func open(_ month: BillingMonth, with dues: [Due]) throws
+    /// Keeps a Due's Amount and Paid as they now are.
+    func update(_ due: Due) throws
 }
 
 /// Everything a Household is made of, as a store keeps it.
@@ -50,5 +52,10 @@ public final class InMemoryHouseholdStore: HouseholdStore {
     public func open(_ month: BillingMonth, with dues: [Due]) throws {
         household?.billingMonths.insert(month)
         household?.dues.append(contentsOf: dues)
+    }
+
+    public func update(_ due: Due) throws {
+        guard let index = household?.dues.firstIndex(where: { $0.id == due.id }) else { return }
+        household?.dues[index] = due
     }
 }
