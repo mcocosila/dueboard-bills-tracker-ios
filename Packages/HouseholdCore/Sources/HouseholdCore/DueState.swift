@@ -13,12 +13,12 @@ public enum DueState: Hashable, Sendable {
 }
 
 extension Due {
-    /// The Due's state on `today`, or nil when nothing needs saying. `soonest` is the last
-    /// day that counts as Due Soon.
-    func state(on today: DueDate, dueSoonThrough soonest: DueDate) -> DueState? {
+    /// The Due's state on `today`, or nil when nothing needs saying. `dueSoonThrough` is the
+    /// last day that counts as Due Soon.
+    func state(on today: DueDate, dueSoonThrough: DueDate) -> DueState? {
         if paid != nil { return .paid }
         if dueDate < today { return .overdue }
-        if dueDate <= soonest { return .dueSoon }
+        if dueDate <= dueSoonThrough { return .dueSoon }
         return nil
     }
 }
