@@ -152,6 +152,10 @@ public struct Household {
 }
 ```
 
+The `MonthBoard` that `openBillingMonth` returns also answers `state(of: due)`: Paid, Due Soon, Overdue,
+or nil when nothing needs saying. The state is derived as of the day the board was made, never stored, so
+the Month board asks for a fresh board when the app comes back to the foreground.
+
 A command that breaks a rule throws a refusal, such as `BillRefusal.dueDayOutOfRange`, whose
 `localizedDescription` is the readable reason the screen shows ("Day must be 1 to 28").
 

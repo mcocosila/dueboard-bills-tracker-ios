@@ -76,7 +76,8 @@ public struct Household {
         }
         return MonthBoard(
             month: month, dues: records.dues.filter { $0.billingMonth == month }, categories: categories,
-            latestOpenable: latestOpenableMonth
+            latestOpenable: latestOpenableMonth, today: DueDate(of: clock.now, in: clock.calendar),
+            dueSoonThrough: dueSoonThrough
         )
     }
 
@@ -124,6 +125,12 @@ public struct Household {
     public var currentBillingMonth: BillingMonth {
         let parts = clock.calendar.dateComponents([.year, .month], from: clock.now)
         return BillingMonth(year: parts.year!, month: parts.month!)
+    }
+
+    /// The last day that counts as Due Soon: 7 days after today, in the clock's time zone.
+    private var dueSoonThrough: DueDate {
+        let calendar = clock.calendar
+        return DueDate(of: calendar.date(byAdding: .day, value: DueState.dueSoonDays, to: clock.now)!, in: calendar)
     }
 
     /// The furthest month that may be opened: the one after the current month.

@@ -4,9 +4,11 @@ import SwiftUI
 /// The Month board: one Billing Month's Unpaid Remaining and its Dues, grouped
 /// by Category, with buttons to step to the previous and next month. It starts on
 /// the current Billing Month; the household core opens each month the first time
-/// it is shown. Each Due takes an Amount and is marked Paid, or Edited, from its row.
+/// it is shown. Each Due takes an Amount and is marked Paid, or Edited, from its row,
+/// and its Due Date is coloured by whether it is Paid, Due Soon or Overdue.
 struct MonthView: View {
     @Binding var household: Household
+    @Environment(\.scenePhase) private var scenePhase
     @State private var month: BillingMonth
     @State private var board: MonthBoard?
     /// Why the month could not be opened.
@@ -36,7 +38,7 @@ struct MonthView: View {
                     Section(group.category.name) {
                         ForEach(group.dues) { due in
                             DueRow(
-                                due: due, focus: $amountBeingEntered,
+                                due: due, state: board?.state(of: due), focus: $amountBeingEntered,
                                 enterAmount: { amount in
                                     withMemberName { name in change { try $0.enterAmount(amount, on: due.id, by: name) } }
                                 },
@@ -83,13 +85,11 @@ struct MonthView: View {
             }
             // Runs each time the tab appears too, so a month left unopened for want of
             // Bills is opened once some have been added.
-            .task(id: month) {
-                do {
-                    board = try household.openBillingMonth(month)
-                    monthRefusal = nil
-                } catch {
-                    monthRefusal = error.localizedDescription
-                }
+            .task(id: month) { showMonth() }
+            // Due Soon and Overdue are as of the day the board was made, so coming back to
+            // the app on a later day shows them as of that day.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { showMonth() }
             }
             .alert(
                 "Not changed", isPresented: Binding(get: { dueRefusal != nil }, set: { if !$0 { dueRefusal = nil } })
@@ -112,6 +112,16 @@ struct MonthView: View {
             } message: {
                 Text("Shown on the Dues you mark Paid.")
             }
+        }
+    }
+
+    /// Opens the month and shows its board, or why it could not be opened.
+    private func showMonth() {
+        do {
+            board = try household.openBillingMonth(month)
+            monthRefusal = nil
+        } catch {
+            monthRefusal = error.localizedDescription
         }
     }
 
@@ -165,10 +175,12 @@ private struct UnpaidRemainingRow: View {
     }
 }
 
-/// One Due: its name, its Due Date or who marked it Paid, and its Amount. A Due not
-/// Paid takes an Amount and has a Paid button; a Paid Due's Amount is locked behind Edit.
+/// One Due: its name, its Due Date coloured by its state with who marked it Paid or
+/// whether it is Due Soon or Overdue, and its Amount. A Due not Paid takes an Amount and
+/// has a Paid button; a Paid Due's Amount is locked behind Edit.
 private struct DueRow: View {
     let due: Due
+    let state: DueState?
     let focus: FocusState<Due.ID?>.Binding
     /// Hands on the Amount typed, once the field is left.
     let enterAmount: (Decimal?) -> Void
@@ -181,11 +193,14 @@ private struct DueRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(due.name)
+                // One Text, so a long line wraps as a sentence.
                 Group {
                     if let paid = due.paid {
-                        Text(paid.summary)
+                        Text("\(dueDate) · \(paid.summary)")
+                    } else if let label = state?.label {
+                        Text("\(dueDate) · \(label)")
                     } else {
-                        Text(due.dueDate.date, format: dayFormat)
+                        dueDate
                     }
                 }
                 .font(.subheadline)
@@ -228,6 +243,13 @@ private struct DueRow: View {
         }
     }
 
+    /// The Due Date, coloured by the Due's state.
+    private var dueDate: Text {
+        Text(due.dueDate.date, format: dayFormat)
+            .fontWeight(.semibold)
+            .foregroundStyle(state.map { AnyShapeStyle($0.colour) } ?? AnyShapeStyle(.secondary))
+    }
+
     /// The Amount in the field: nil when it is empty, the Due's own when it is not a number.
     private var typedAmount: Decimal? {
         let typed = text.trimmingCharacters(in: .whitespaces)
@@ -240,6 +262,27 @@ private extension Due {
     /// The Amount as the field shows it for changing, or empty when there is none.
     var amountText: String {
         amount?.formatted(.number.precision(.fractionLength(2))) ?? ""
+    }
+}
+
+private extension DueState {
+    /// The colour of the Due Date, readable on a row in light and dark mode.
+    var colour: Color {
+        switch self {
+        case .paid: Color(.paid)
+        case .dueSoon: Color(.dueSoon)
+        case .overdue: Color(.overdue)
+        }
+    }
+
+    /// Said after the Due Date, so the state does not rest on colour alone. A Paid Due
+    /// says who Paid it instead.
+    var label: String? {
+        switch self {
+        case .paid: nil
+        case .dueSoon: "Due Soon"
+        case .overdue: "Overdue"
+        }
     }
 }
 
