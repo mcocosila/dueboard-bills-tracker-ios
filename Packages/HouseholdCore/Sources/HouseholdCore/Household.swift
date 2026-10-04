@@ -91,7 +91,7 @@ public struct Household {
             guard (amount ?? 0) >= 0 else { throw DueRefusal.negativeAmount }
             due.amount = amount
             if amount == 0 {
-                due.paid = Due.Paid(at: now, by: member)
+                due.markPaid(at: now, by: member)
             }
         }
     }
@@ -100,11 +100,7 @@ public struct Household {
     @discardableResult
     public mutating func markPaid(_ dueID: Due.ID, by member: String) throws -> Due {
         let now = clock.now
-        return try changeDue(dueID) { due in
-            if due.paid == nil {
-                due.paid = Due.Paid(at: now, by: member)
-            }
-        }
+        return try changeDue(dueID) { due in due.markPaid(at: now, by: member) }
     }
 
     /// Edit: undoes Paid, so the Due is owed again and its Amount can be changed.

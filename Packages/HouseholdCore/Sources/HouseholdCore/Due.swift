@@ -39,8 +39,18 @@ public struct Due: Hashable, Identifiable, Sendable {
         self.init(
             id: UUID(), billID: bill.id, billingMonth: month, name: bill.name, categoryID: bill.categoryID,
             position: bill.position, dueDate: bill.dueDay.dueDate(in: month), amount: bill.defaultAmount,
-            paid: bill.defaultAmount == 0 ? Paid(at: now, by: nil) : nil
+            paid: nil
         )
+        if bill.defaultAmount == 0 {
+            markPaid(at: now, by: nil)
+        }
+    }
+
+    /// Marks the Due Paid, unless it already is: a Paid Due keeps who marked it and when.
+    mutating func markPaid(at now: Date, by member: String?) {
+        if paid == nil {
+            paid = Paid(at: now, by: member)
+        }
     }
 
     /// When a Due was marked Paid and by whom (see Paid in CONTEXT.md).

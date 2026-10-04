@@ -42,7 +42,7 @@ struct PaidTests {
         let refusal = #expect(throws: DueRefusal.paidNotEditable) {
             try household.enterAmount(Decimal(string: "130.00"), on: due.id, by: "Mircea")
         }
-        #expect(refusal?.localizedDescription == "A Paid Due's Amount cannot be changed; press Edit first")
+        #expect(refusal?.localizedDescription == "The Amount of a Paid Due cannot be changed; press Edit first")
         #expect(try household.due(named: "City Power").amount == Decimal(string: "123.45"))
 
         try household.undoPaid(due.id)

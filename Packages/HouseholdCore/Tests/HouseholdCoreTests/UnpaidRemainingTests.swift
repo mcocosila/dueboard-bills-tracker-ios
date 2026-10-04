@@ -21,7 +21,7 @@ struct UnpaidRemainingTests {
 
         let remaining = try household.openBillingMonth(.september).unpaidRemaining
 
-        #expect(remaining == UnpaidRemaining(amount: Decimal(string: "3950.00")!, withoutAmount: 2))
+        #expect(remaining == UnpaidRemaining(amount: try #require(Decimal(string: "3950.00")), withoutAmount: 2))
     }
 
     @Test("marking Paid takes the Due out of Unpaid Remaining")
@@ -32,7 +32,7 @@ struct UnpaidRemainingTests {
 
         let remaining = try household.openBillingMonth(.september).unpaidRemaining
 
-        #expect(remaining == UnpaidRemaining(amount: Decimal(string: "450.00")!, withoutAmount: 1))
+        #expect(remaining == UnpaidRemaining(amount: try #require(Decimal(string: "450.00")), withoutAmount: 1))
     }
 
     @Test("an Amount entered on a Due not Paid is counted in Unpaid Remaining")
@@ -42,7 +42,7 @@ struct UnpaidRemainingTests {
 
         let remaining = try household.openBillingMonth(.september).unpaidRemaining
 
-        #expect(remaining == UnpaidRemaining(amount: Decimal(string: "4039.99")!, withoutAmount: 1))
+        #expect(remaining == UnpaidRemaining(amount: try #require(Decimal(string: "4039.99")), withoutAmount: 1))
     }
 
     @Test("Unpaid Remaining is zero when every Due is Paid")
@@ -65,6 +65,6 @@ struct UnpaidRemainingTests {
 
         let remaining = try household.openBillingMonth(.september).unpaidRemaining
 
-        #expect(remaining == UnpaidRemaining(amount: Decimal(string: "3950.00")!, withoutAmount: 2))
+        #expect(remaining == UnpaidRemaining(amount: try #require(Decimal(string: "3950.00")), withoutAmount: 2))
     }
 }

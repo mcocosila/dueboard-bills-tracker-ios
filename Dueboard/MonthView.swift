@@ -9,7 +9,8 @@ struct MonthView: View {
     @Binding var household: Household
     @State private var month: BillingMonth
     @State private var board: MonthBoard?
-    @State private var refusal: String?
+    /// Why the month could not be opened.
+    @State private var monthRefusal: String?
     /// Why the last change to a Due was refused, shown until dismissed.
     @State private var dueRefusal: String?
     @FocusState private var amountBeingEntered: Due.ID?
@@ -36,8 +37,17 @@ struct MonthView: View {
                         ForEach(group.dues) { due in
                             DueRow(
                                 due: due, focus: $amountBeingEntered,
-                                enterAmount: { amount in enterAmount(amount, on: due) },
-                                markPaid: { withMemberName { name in change { try $0.markPaid(due.id, by: name) } } },
+                                enterAmount: { amount in
+                                    withMemberName { name in change { try $0.enterAmount(amount, on: due.id, by: name) } }
+                                },
+                                markPaid: { typed in
+                                    withMemberName { name in
+                                        change {
+                                            if typed != due.amount { try $0.enterAmount(typed, on: due.id, by: name) }
+                                            try $0.markPaid(due.id, by: name)
+                                        }
+                                    }
+                                },
                                 edit: { change { try $0.undoPaid(due.id) } }
                             )
                         }
@@ -46,8 +56,8 @@ struct MonthView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .overlay {
-                if let refusal {
-                    ContentUnavailableView(refusal, systemImage: "exclamationmark.triangle")
+                if let monthRefusal {
+                    ContentUnavailableView(monthRefusal, systemImage: "exclamationmark.triangle")
                 } else if board?.groups.isEmpty == true {
                     ContentUnavailableView(
                         "No Dues", systemImage: "calendar",
@@ -76,9 +86,9 @@ struct MonthView: View {
             .task(id: month) {
                 do {
                     board = try household.openBillingMonth(month)
-                    refusal = nil
+                    monthRefusal = nil
                 } catch {
-                    refusal = error.localizedDescription
+                    monthRefusal = error.localizedDescription
                 }
             }
             .alert(
@@ -105,16 +115,6 @@ struct MonthView: View {
         }
     }
 
-    /// Enters the Amount. Zero marks the Due Paid, which records who, so only then is
-    /// the name needed before going on.
-    private func enterAmount(_ amount: Decimal?, on due: Due) {
-        if amount == 0 {
-            withMemberName { name in change { try $0.enterAmount(amount, on: due.id, by: name) } }
-        } else {
-            change { try $0.enterAmount(amount, on: due.id, by: memberName) }
-        }
-    }
-
     /// Sends a change to the household core, then shows the board as it now is, or
     /// why the change was refused.
     private func change(_ command: (inout Household) throws -> Void) {
@@ -136,7 +136,10 @@ struct MonthView: View {
         }
     }
 
+    /// Asks for the name, then runs `action` with it. While the question is open, a
+    /// second one is not asked: the action that asked first is the one kept.
     private func askForName(then action: @escaping (String) -> Void) {
+        guard !askingForName else { return }
         nameBeingEntered = memberName
         waitingForName = action
         askingForName = true
@@ -167,11 +170,12 @@ private struct UnpaidRemainingRow: View {
 private struct DueRow: View {
     let due: Due
     let focus: FocusState<Due.ID?>.Binding
+    /// Hands on the Amount typed, once the field is left.
     let enterAmount: (Decimal?) -> Void
-    let markPaid: () -> Void
+    /// Marks the Due Paid, handing on the Amount typed so it is not lost to the tap.
+    let markPaid: (Decimal?) -> Void
     let edit: () -> Void
-    /// The Amount as typed, handed on once the field is left.
-    @State private var amount: Decimal?
+    @State private var text = ""
 
     var body: some View {
         HStack {
@@ -181,7 +185,7 @@ private struct DueRow: View {
                     if let paid = due.paid {
                         Text(paid.summary)
                     } else {
-                        Text(due.dueDate.date, format: .dateTime.month(.abbreviated).day())
+                        Text(due.dueDate.date, format: dayFormat)
                     }
                 }
                 .font(.subheadline)
@@ -200,38 +204,55 @@ private struct DueRow: View {
                 Button("Edit", action: edit)
                     .buttonStyle(.bordered)
             } else {
-                TextField("Amount", value: $amount, format: .number.precision(.fractionLength(2)))
+                TextField("Amount", text: $text)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
                     .frame(maxWidth: 110)
                     .focused(focus, equals: due.id)
-                Button("Paid", systemImage: "checkmark.circle", action: markPaid)
+                Button("Paid", systemImage: "checkmark.circle") { markPaid(typedAmount) }
                     .labelStyle(.iconOnly)
                     .font(.title2)
             }
         }
         // Each button acts on its own, rather than a tap anywhere on the row pressing them all.
         .buttonStyle(.borderless)
-        .onAppear { amount = due.amount }
-        // The field shows the Amount as the Due has it: a refused one goes back to the
-        // Amount before, an accepted one arrives with the changed Due.
-        .onChange(of: due) { amount = due.amount }
-        .onChange(of: amount) {
-            guard amount != due.amount else { return }
-            enterAmount(amount)
-            amount = due.amount
+        .onAppear { text = due.amountText }
+        // An accepted Amount arrives with the changed Due.
+        .onChange(of: due) { text = due.amountText }
+        .onChange(of: focus.wrappedValue) { left, _ in
+            guard left == due.id, due.paid == nil, typedAmount != due.amount else { return }
+            enterAmount(typedAmount)
+            // A refused Amount leaves the Due as it was, so the field goes back to it.
+            text = due.amountText
         }
+    }
+
+    /// The Amount in the field: nil when it is empty, the Due's own when it is not a number.
+    private var typedAmount: Decimal? {
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return nil }
+        return (try? Decimal(typed, format: .number)) ?? due.amount
+    }
+}
+
+private extension Due {
+    /// The Amount as the field shows it for changing, or empty when there is none.
+    var amountText: String {
+        amount?.formatted(.number.precision(.fractionLength(2))) ?? ""
     }
 }
 
 private extension Due.Paid {
     /// "Paid Oct 4 by Mircea", or "Paid Oct 4" for a Due Paid from birth.
     var summary: String {
-        let day = at.formatted(.dateTime.month(.abbreviated).day())
+        let day = at.formatted(dayFormat)
         return by.map { "Paid \(day) by \($0)" } ?? "Paid \(day)"
     }
 }
+
+/// "Oct 4", in the phone's language.
+private let dayFormat = Date.FormatStyle.dateTime.month(.abbreviated).day()
 
 /// The currency amounts are shown in: the phone's own.
 private var currencyCode: String {
