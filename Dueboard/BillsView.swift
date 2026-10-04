@@ -2,10 +2,12 @@ import HouseholdCore
 import SwiftUI
 
 /// The Bills list: every Bill, grouped by Category in Category order, with a
-/// count per Category.
+/// count per Category, and the Retired Bills in a muted group of their own at the
+/// end. A Bill is edited, Retired or reactivated by tapping its row.
 struct BillsView: View {
     @Binding var household: Household
     @State private var isAddingBill = false
+    @State private var billBeingEdited: Bill?
 
     var body: some View {
         NavigationStack {
@@ -13,30 +15,57 @@ struct BillsView: View {
                 ForEach(household.billsList.groups) { group in
                     Section {
                         ForEach(group.bills) { bill in
-                            BillRow(bill: bill)
+                            Button { billBeingEdited = bill } label: { BillRow(bill: bill) }
                         }
                     } header: {
-                        HStack {
-                            Text(group.category.name)
-                            Spacer()
-                            Text(group.count, format: .number)
-                                .monospacedDigit()
+                        CountedHeader(title: group.category.name, count: group.count)
+                    }
+                }
+                let retired = household.billsList.retired
+                if !retired.isEmpty {
+                    Section {
+                        ForEach(retired) { bill in
+                            Button { billBeingEdited = bill } label: { BillRow(bill: bill) }
                         }
+                        .foregroundStyle(.secondary)
+                    } header: {
+                        CountedHeader(title: "Retired", count: retired.count)
                     }
                 }
             }
+            // Rows are buttons only to open the form, so they keep the look of plain rows.
+            .tint(.primary)
             .navigationTitle("Bills")
             .toolbar {
                 Button("Add a Bill", systemImage: "plus") { isAddingBill = true }
             }
             .sheet(isPresented: $isAddingBill) {
-                AddBillView(household: $household)
+                BillFormView(household: $household)
+            }
+            .sheet(item: $billBeingEdited) { bill in
+                BillFormView(household: $household, editing: bill)
             }
         }
     }
 }
 
-/// One Bill: its name, its Due Day and its Default Amount when it has one.
+/// A group's name and how many Bills it holds.
+private struct CountedHeader: View {
+    let title: String
+    let count: Int
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(count, format: .number)
+                .monospacedDigit()
+        }
+    }
+}
+
+/// One Bill: its name, its Due Day, whether it is Occasional, and its Default Amount
+/// when it has one.
 private struct BillRow: View {
     let bill: Bill
 
@@ -44,7 +73,7 @@ private struct BillRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(bill.name)
-                Text(dueDayLabel)
+                Text(bill.isRecurring ? dueDayLabel : "\(dueDayLabel) · Occasional")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -80,5 +109,15 @@ private struct BillRow: View {
                 name: "Riverside School", categoryID: household.categories[1].id, dueDay: 1, dueMonth: .nextMonth,
                 defaultAmount: 450
             ))
+            _ = try? household.addBill(NewBill(
+                name: "Plumber", categoryID: household.categories[0].id, dueDay: 20, dueMonth: .sameMonth,
+                defaultAmount: nil, isRecurring: false
+            ))
+            if let water = try? household.addBill(NewBill(
+                name: "Water", categoryID: household.categories[0].id, dueDay: 5, dueMonth: .sameMonth,
+                defaultAmount: nil
+            )) {
+                _ = try? household.retireBill(water.id)
+            }
         }
 }

@@ -53,14 +53,26 @@ final class CoreDataHouseholdStore: HouseholdStore {
             guard let category = try context.fetch(request).first else { throw DamagedRecord(entity: "Category") }
             let stored = StoredBill(context: context)
             stored.id = bill.id
-            stored.name = bill.name
-            stored.category = category
-            stored.dueDay = Int16(bill.dueDay.day)
-            stored.dueMonth = bill.dueDay.month.rawValue
-            stored.defaultAmount = bill.defaultAmount.map { NSDecimalNumber(decimal: $0) }
-            stored.isRecurring = bill.isRecurring
             stored.position = Int64(bill.position)
+            stored.keep(detailsOf: bill, in: category)
             try context.save()
+        }
+    }
+
+    func update(_ bill: Bill) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                let stored = try record(StoredBill.fetchRequest(), withID: bill.id, entity: "Bill", in: context)
+                let category = try record(
+                    StoredCategory.fetchRequest(), withID: bill.categoryID, entity: "Category", in: context
+                )
+                stored.keep(detailsOf: bill, in: category)
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
         }
     }
 
@@ -78,15 +90,7 @@ final class CoreDataHouseholdStore: HouseholdStore {
                 for due in dues {
                     guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
                     guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
-                    let stored = StoredDue(context: context)
-                    stored.id = due.id
-                    stored.name = due.name
-                    stored.position = Int64(due.position)
-                    stored.dueDate = due.dueDate.stored
-                    stored.keep(amountAndPaidOf: due)
-                    stored.bill = bill
-                    stored.category = category
-                    stored.billingMonth = storedMonth
+                    StoredDue(context: context).keep(due, of: bill, in: category, month: storedMonth)
                 }
                 try context.save()
             } catch {
@@ -98,14 +102,51 @@ final class CoreDataHouseholdStore: HouseholdStore {
         }
     }
 
+    func insert(_ due: Due) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                let request = StoredBillingMonth.fetchRequest()
+                request.predicate = NSPredicate(
+                    format: "year == %d AND month == %d", due.billingMonth.year, due.billingMonth.month
+                )
+                guard let month = try context.fetch(request).first else { throw DamagedRecord(entity: "Billing Month") }
+                let bill = try record(StoredBill.fetchRequest(), withID: due.billID, entity: "Bill", in: context)
+                let category = try record(
+                    StoredCategory.fetchRequest(), withID: due.categoryID, entity: "Category", in: context
+                )
+                StoredDue(context: context).keep(due, of: bill, in: category, month: month)
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
+        }
+    }
+
     func update(_ due: Due) throws {
         let context = container.viewContext
         try context.performAndWait {
             do {
-                let request = StoredDue.fetchRequest()
-                request.predicate = NSPredicate(format: "id == %@", due.id as CVarArg)
-                guard let stored = try context.fetch(request).first else { throw DamagedRecord(entity: "Due") }
+                let stored = try record(StoredDue.fetchRequest(), withID: due.id, entity: "Due", in: context)
                 stored.keep(amountAndPaidOf: due)
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
+        }
+    }
+
+    func delete(_ dueID: Due.ID) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                let request = StoredDue.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", dueID as CVarArg)
+                for stored in try context.fetch(request) {
+                    context.delete(stored)
+                }
                 try context.save()
             } catch {
                 context.rollback()
@@ -120,6 +161,15 @@ final class CoreDataHouseholdStore: HouseholdStore {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true)]
         request.fetchLimit = 1
         return try context.fetch(request).first
+    }
+
+    /// The record of `entity` with `id`, the first should two share it.
+    private func record<Record: NSManagedObject>(
+        _ request: NSFetchRequest<Record>, withID id: UUID, entity: String, in context: NSManagedObjectContext
+    ) throws -> Record {
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let record = try context.fetch(request).first else { throw DamagedRecord(entity: entity) }
+        return record
     }
 
     /// Every record the request fetches, by id. The model can have no unique
@@ -161,8 +211,22 @@ private extension Bill {
             dueDay: DueDay(day: Int(stored.dueDay), month: dueMonth),
             defaultAmount: stored.defaultAmount?.decimalValue,
             isRecurring: stored.isRecurring,
+            isRetired: stored.isRetired,
             position: Int(stored.position)
         )
+    }
+}
+
+private extension StoredBill {
+    /// Takes the Bill's details, Recurring and Retired, the parts of a Bill that change after it is added.
+    func keep(detailsOf bill: Bill, in category: StoredCategory) {
+        name = bill.name
+        self.category = category
+        dueDay = Int16(bill.dueDay.day)
+        dueMonth = bill.dueDay.month.rawValue
+        defaultAmount = bill.defaultAmount.map { NSDecimalNumber(decimal: $0) }
+        isRecurring = bill.isRecurring
+        isRetired = bill.isRetired
     }
 }
 
@@ -192,6 +256,18 @@ private extension Due {
 }
 
 private extension StoredDue {
+    /// Takes all of a new Due, tied to its Bill, Category and Billing Month.
+    func keep(_ due: Due, of bill: StoredBill, in category: StoredCategory, month: StoredBillingMonth) {
+        id = due.id
+        name = due.name
+        position = Int64(due.position)
+        dueDate = due.dueDate.stored
+        keep(amountAndPaidOf: due)
+        self.bill = bill
+        self.category = category
+        billingMonth = month
+    }
+
     /// Takes the Due's Amount and Paid, the parts of a Due that change after it is generated.
     func keep(amountAndPaidOf due: Due) {
         amount = due.amount.map { NSDecimalNumber(decimal: $0) }

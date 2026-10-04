@@ -36,9 +36,38 @@ extension NewBill {
             defaultAmount: defaultAmount
         )
     }
+
+    /// Plumber in the Household's first Category, due on the 20th, with no Default Amount: Occasional.
+    static func plumber(in household: Household) -> NewBill {
+        NewBill(
+            name: "Plumber", categoryID: household.categories[0].id, dueDay: 20, dueMonth: .sameMonth,
+            defaultAmount: nil, isRecurring: false
+        )
+    }
+
+    /// Walmart in the Household's third Category, due on the 12th, with a Default Amount of 120.00:
+    /// Occasional unless told otherwise.
+    static func walmart(in household: Household, recurring: Bool = false) -> NewBill {
+        NewBill(
+            name: "Walmart", categoryID: household.categories[2].id, dueDay: 12, dueMonth: .sameMonth,
+            defaultAmount: Decimal(string: "120.00"), isRecurring: recurring
+        )
+    }
+
+    /// Water in the Household's first Category, due on the 5th, with no Default Amount.
+    static func water(in household: Household) -> NewBill {
+        NewBill(
+            name: "Water", categoryID: household.categories[0].id, dueDay: 5, dueMonth: .sameMonth,
+            defaultAmount: nil
+        )
+    }
 }
 
 extension BillingMonth {
+    /// Two months before the current one on the `.testing` clock.
+    static let july = BillingMonth(year: 2026, month: 7)
+    /// The month before the current one on the `.testing` clock.
+    static let august = BillingMonth(year: 2026, month: 8)
     /// The current Billing Month on the `.testing` clock.
     static let september = BillingMonth(year: 2026, month: 9)
     /// The month after the current one on the `.testing` clock, the latest that can be opened.
@@ -49,6 +78,11 @@ extension Household {
     /// The Due generated for the Bill named `name` in `month`, opening the month if need be.
     mutating func due(named name: String, in month: BillingMonth = .september) throws -> Due {
         try #require(try openBillingMonth(month).dues.first { $0.name == name })
+    }
+
+    /// The Bill named `name`, listed in its Category or with the Retired Bills.
+    func bill(named name: String) throws -> Bill {
+        try #require((billsList.groups.flatMap(\.bills) + billsList.retired).first { $0.name == name })
     }
 }
 

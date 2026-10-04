@@ -10,9 +10,10 @@ Dueboard.xcodeproj/            The Xcode project: one app target and the shared 
 Dueboard/                      The app: SwiftUI screens and, later, the CloudKit and notification adapters
   DueboardApp.swift            The entry point (@main); opens the Household and shows the first screen
   RootView.swift               The tabs: the Billing Month and the Bills
-  MonthView.swift              The Month board: a Billing Month's Dues by Category, stepping between months
-  BillsView.swift              The Bills list, grouped by Category
-  AddBillView.swift            The form for adding a Bill
+  MonthView.swift              The Month board: a Billing Month's Dues by Category, stepping between months,
+                               adding a Bill to the month and removing a Due
+  BillsView.swift              The Bills list, grouped by Category, with the Retired Bills last
+  BillFormView.swift           The form for adding or editing a Bill, and Retiring or reactivating it
   CoreDataHouseholdStore.swift Keeps the Household in Core Data on the phone
   Dueboard.xcdatamodeld        The Core Data model, one version per change: Household, Category, Bill,
                                Billing Month and Due
@@ -125,7 +126,7 @@ Things to know when reviewing a view:
   padding too, `.background(.red).padding()` does not.
 - `@State` marks a value the view owns and can change (a text being typed); `@Binding` is a value owned by
   a parent that the view may change. `DueboardApp` owns the `Household` as `@State` and hands it down as a
-  `@Binding`, so a Bill added in `AddBillView` shows at once in `BillsView`.
+  `@Binding`, so a Bill added in `BillFormView` shows at once in `BillsView`.
 - The **canvas** (Editor > Canvas, or **Cmd-Option-Return**) renders the `#Preview` live next to the code.
 - What to look for in review: a view should only show what the core returns and send commands to it. Any
   `if` that decides a domain rule (is this Due Overdue? can this Bill be added?) belongs in the core, with
@@ -144,8 +145,13 @@ public struct Household {
     public var categories: [Category] { get }
     public var billsList: BillsList { get }
     public mutating func addBill(_ new: NewBill) throws -> Bill
+    public mutating func editBill(_ billID: Bill.ID, to details: NewBill) throws -> Bill
+    public mutating func retireBill(_ billID: Bill.ID) throws -> Bill
+    public mutating func reactivateBill(_ billID: Bill.ID) throws -> Bill
     public var currentBillingMonth: BillingMonth { get }
     public mutating func openBillingMonth(_ month: BillingMonth) throws -> MonthBoard
+    public mutating func addDue(of billID: Bill.ID, to month: BillingMonth) throws -> Due
+    public mutating func removeDue(_ dueID: Due.ID) throws
     public mutating func enterAmount(_ amount: Decimal?, on dueID: Due.ID, by member: String) throws -> Due
     public mutating func markPaid(_ dueID: Due.ID, by member: String) throws -> Due
     public mutating func undoPaid(_ dueID: Due.ID) throws -> Due   // the Edit button
@@ -153,7 +159,8 @@ public struct Household {
 ```
 
 The `MonthBoard` that `openBillingMonth` returns also answers `state(of: due)`: Paid, Due Soon, Overdue,
-or nil when nothing needs saying. The state is derived as of the day the board was made, never stored, so
+or nil when nothing needs saying, and lists the Bills that can be added to the month by hand
+(`billsToAdd`). The state is derived as of the day the board was made, never stored, so
 the Month board asks for a fresh board when the app comes back to the foreground.
 
 A command that breaks a rule throws a refusal, such as `BillRefusal.dueDayOutOfRange`, whose
@@ -173,7 +180,7 @@ A change to the Core Data model goes in a new model version, never into an exist
 the store already on a phone only when the app still ships the model that store was made with. In Xcode,
 select `Dueboard.xcdatamodeld`, then Editor > Add Model Version, make the change in the new version and set
 it as current in the File inspector. `Dueboard 2` added Billing Month and Due; `Dueboard 3` added when and by
-whom a Due was marked Paid.
+whom a Due was marked Paid; `Dueboard 4` added whether a Bill is Retired.
 
 **The clock is injected.** The core never asks the device for the date or the time zone itself. Whoever
 creates a `Household` hands it a `WallClock`, which supplies `now` and the `timeZone`:
@@ -193,9 +200,8 @@ core stores things can change without breaking a test. `import HouseholdCore` (n
 it the first time a Due is marked Paid and keeps it on the phone (`MonthView.swift`); sharing will hand the
 member's iCloud name instead.
 
-**What comes next**: later tickets grow this same interface, with commands such as add or remove a Due and
-outputs such as the reminder plan. CloudKit sync and notifications plug in
-as adapters in the app, outside the core.
+**What comes next**: later tickets grow this same interface, with outputs such as the reminder plan.
+CloudKit sync and notifications plug in as adapters in the app, outside the core.
 
 **`public`**: Swift hides everything in a module from other modules unless it is marked `public`. The
 app and the tests are other modules, so in the core `public` marks the interface they may use, and anything

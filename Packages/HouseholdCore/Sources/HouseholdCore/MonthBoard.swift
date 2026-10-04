@@ -1,5 +1,6 @@
 /// A Billing Month as the Month board shows it: its Dues grouped by Category, each
-/// with its state as of the day the board was made, and its Unpaid Remaining.
+/// with its state as of the day the board was made, its Unpaid Remaining, and the Bills
+/// that can be added to it by hand.
 public struct MonthBoard: Sendable {
     public struct Group: Identifiable, Sendable {
         public let category: Category
@@ -17,6 +18,9 @@ public struct MonthBoard: Sendable {
     /// The month after this one, or nil when it cannot be opened yet.
     public let next: BillingMonth?
     public let unpaidRemaining: UnpaidRemaining
+    /// The Bills not Retired that the month has no Due for, grouped by Category in Category
+    /// order; a Category with none is left out.
+    public let billsToAdd: [BillsList.Group]
     /// The day the board was made, in the clock's time zone.
     private let today: DueDate
     /// The last day that counts as Due Soon.
@@ -30,9 +34,14 @@ public struct MonthBoard: Sendable {
         due.state(on: today, dueSoonThrough: dueSoonThrough)
     }
 
+    /// Whether `due` can be removed from the month: only while it is not Paid.
+    public func canRemove(_ due: Due) -> Bool {
+        due.paid == nil
+    }
+
     init(
-        month: BillingMonth, dues: [Due], categories: [Category], latestOpenable: BillingMonth, today: DueDate,
-        dueSoonThrough: DueDate
+        month: BillingMonth, dues: [Due], bills: [Bill], categories: [Category], latestOpenable: BillingMonth,
+        today: DueDate, dueSoonThrough: DueDate
     ) {
         self.month = month
         self.today = today
@@ -40,6 +49,9 @@ public struct MonthBoard: Sendable {
         previous = month > .earliest ? month.shifted(by: -1) : nil
         next = month < latestOpenable ? month.shifted(by: 1) : nil
         unpaidRemaining = UnpaidRemaining(of: dues)
+        let billed = Set(dues.map(\.billID))
+        billsToAdd = BillsList(bills: bills.filter { !billed.contains($0.id) }, categories: categories)
+            .groups.filter { !$0.bills.isEmpty }
         groups = categories.compactMap { category in
             let dues = dues.filter { $0.categoryID == category.id }.sorted { ($0.dueDate, $0.position) < ($1.dueDate, $1.position) }
             return dues.isEmpty ? nil : Group(category: category, dues: dues)
