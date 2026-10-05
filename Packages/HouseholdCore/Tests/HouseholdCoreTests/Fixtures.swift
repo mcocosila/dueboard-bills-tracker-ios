@@ -54,6 +54,32 @@ extension NewBill {
         )
     }
 
+    /// Visa in the Household's third Category, Credit Cards, due on the 25th, with no Default Amount.
+    static func visa(in household: Household) -> NewBill {
+        NewBill(
+            name: "Visa", categoryID: household.categories[2].id, dueDay: 25, dueMonth: .sameMonth,
+            defaultAmount: nil
+        )
+    }
+
+    /// Mastercard in the Household's third Category, Credit Cards, due on the 22nd, with no Default
+    /// Amount.
+    static func mastercard(in household: Household) -> NewBill {
+        NewBill(
+            name: "Mastercard", categoryID: household.categories[2].id, dueDay: 22, dueMonth: .sameMonth,
+            defaultAmount: nil
+        )
+    }
+
+    /// Dance Studio in the Household's second Category, due on the 8th, with a Default Amount of
+    /// 200.00: Card-Paid.
+    static func danceStudio(in household: Household) -> NewBill {
+        NewBill(
+            name: "Dance Studio", categoryID: household.categories[1].id, dueDay: 8, dueMonth: .sameMonth,
+            defaultAmount: Decimal(string: "200.00"), isCardPaid: true
+        )
+    }
+
     /// Water in the Household's first Category, due on the 5th, with no Default Amount.
     static func water(in household: Household) -> NewBill {
         NewBill(

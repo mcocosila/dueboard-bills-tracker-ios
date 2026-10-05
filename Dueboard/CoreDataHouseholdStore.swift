@@ -211,6 +211,7 @@ private extension Bill {
             dueDay: DueDay(day: Int(stored.dueDay), month: dueMonth),
             defaultAmount: stored.defaultAmount?.decimalValue,
             isRecurring: stored.isRecurring,
+            isCardPaid: stored.isCardPaid,
             isRetired: stored.isRetired,
             position: Int(stored.position)
         )
@@ -218,7 +219,8 @@ private extension Bill {
 }
 
 private extension StoredBill {
-    /// Takes the Bill's details, Recurring and Retired, the parts of a Bill that change after it is added.
+    /// Takes the Bill's details, Recurring, Card-Paid and Retired, the parts of a Bill that change
+    /// after it is added.
     func keep(detailsOf bill: Bill, in category: StoredCategory) {
         name = bill.name
         self.category = category
@@ -226,6 +228,7 @@ private extension StoredBill {
         dueMonth = bill.dueDay.month.rawValue
         defaultAmount = bill.defaultAmount.map { NSDecimalNumber(decimal: $0) }
         isRecurring = bill.isRecurring
+        isCardPaid = bill.isCardPaid
         isRetired = bill.isRetired
     }
 }
@@ -249,8 +252,9 @@ private extension Due {
             categoryID: categoryID,
             position: Int(stored.position),
             dueDate: dueDate,
+            isCardPaid: stored.isCardPaid,
             amount: stored.amount?.decimalValue,
-            paid: stored.paidAt.map { Due.Paid(at: $0, by: stored.paidBy) }
+            paid: stored.paidAt.map { Due.Paid(at: $0, by: stored.paidBy, paidAmount: stored.paidAmount?.decimalValue) }
         )
     }
 }
@@ -262,6 +266,7 @@ private extension StoredDue {
         name = due.name
         position = Int64(due.position)
         dueDate = due.dueDate.stored
+        isCardPaid = due.isCardPaid
         keep(amountAndPaidOf: due)
         self.bill = bill
         self.category = category
@@ -273,6 +278,7 @@ private extension StoredDue {
         amount = due.amount.map { NSDecimalNumber(decimal: $0) }
         paidAt = due.paid?.at
         paidBy = due.paid?.by
+        paidAmount = due.paid?.paidAmount.map { NSDecimalNumber(decimal: $0) }
     }
 }
 

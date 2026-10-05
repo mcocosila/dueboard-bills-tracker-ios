@@ -1,6 +1,8 @@
+import Foundation
+
 /// A Billing Month as the Month board shows it: its Dues grouped by Category, each
-/// with its state as of the day the board was made, its Unpaid Remaining, and the Bills
-/// that can be added to it by hand.
+/// with its state as of the day the board was made, its Unpaid Remaining and Unpaid
+/// Balance, and the Bills that can be added to it by hand.
 public struct MonthBoard: Sendable {
     public struct Group: Identifiable, Sendable {
         public let category: Category
@@ -18,6 +20,9 @@ public struct MonthBoard: Sendable {
     /// The month after this one, or nil when it cannot be opened yet.
     public let next: BillingMonth?
     public let unpaidRemaining: UnpaidRemaining
+    /// The sum of the Unpaid Balances of the month's credit card Dues, what the cards still
+    /// hold, for the warning under Unpaid Remaining; nil when it is zero, so no warning shows.
+    public let unpaidBalance: Decimal?
     /// The Bills not Retired that the month has no Due for, grouped by Category in Category
     /// order; a Category with none is left out.
     public let billsToAdd: [BillsList.Group]
@@ -32,6 +37,11 @@ public struct MonthBoard: Sendable {
     /// Paid, Due Soon or Overdue, or nil when nothing needs saying about `due`.
     public func state(of due: Due) -> DueState? {
         due.state(on: today, dueSoonThrough: dueSoonThrough)
+    }
+
+    /// Whether `due` takes a Paid Amount when it is marked Paid: only a credit card Due does.
+    public func takesPaidAmount(_ due: Due) -> Bool {
+        due.isCreditCard(among: groups.map(\.category))
     }
 
     /// Whether `due` can be removed from the month: only while it is not Paid.
@@ -49,6 +59,8 @@ public struct MonthBoard: Sendable {
         previous = month > .earliest ? month.shifted(by: -1) : nil
         next = month < latestOpenable ? month.shifted(by: 1) : nil
         unpaidRemaining = UnpaidRemaining(of: dues)
+        let unpaidBalance = dues.map(\.unpaidBalance).reduce(0, +)
+        self.unpaidBalance = unpaidBalance > 0 ? unpaidBalance : nil
         let billed = Set(dues.map(\.billID))
         billsToAdd = BillsList(bills: bills.filter { !billed.contains($0.id) }, categories: categories)
             .groups.filter { !$0.bills.isEmpty }

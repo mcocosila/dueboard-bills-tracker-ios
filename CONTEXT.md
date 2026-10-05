@@ -29,7 +29,7 @@ The calendar month in which a Due must be paid, and the set of Dues paid from it
 _Avoid_: Period, cycle, template
 
 **Category**:
-A named group of Bills. Each Household has its own Categories, in its own order; a new Household starts with House, Education and Credit Cards as suggestions.
+A named group of Bills. Each Household has its own Categories, in its own order; a new Household starts with House, Education and Credit Cards as suggestions. The Bills in the Credit Cards Category are the Credit Card Bills.
 _Avoid_: Group, section, bucket
 
 **Due Day**:
@@ -47,15 +47,19 @@ _Avoid_: Fixed amount, estimate
 The money owed on a Due. Unknown until entered, except when pre-filled from a Default Amount. Plain number, single currency.
 
 **Paid**:
-The state of a Due once it has been dealt with for its Billing Month: its Amount paid in full or, for a Credit Cards Due, its Paid Amount paid and the rest left as Unpaid Balance. Records when and by whom. A Due whose Amount is zero is Paid from birth. The Amount cannot be edited while the Due is Paid; Edit (undo Paid) first, then change it. The button that undoes Paid is labelled Edit.
+The state of a Due once it has been dealt with for its Billing Month: its Amount paid in full or, for a credit card Due, its Paid Amount paid and the rest left as Unpaid Balance. Records when and by whom. A Due whose Amount is zero is Paid from birth. The Amount cannot be edited while the Due is Paid; Edit (undo Paid) first, then change it. The button that undoes Paid is labelled Edit.
 _Avoid_: Settled, cleared, done, partially paid
 
+**Credit Card Bill**:
+A Bill in the Credit Cards Category; being in that Category is what makes a Bill a credit card, never a setting of its own. Its Dues are credit card Dues: they take a Paid Amount and can leave an Unpaid Balance.
+_Avoid_: Card account, Credit Cards Due
+
 **Paid Amount**:
-What was actually paid on a Credit Cards Due when it is less than its Amount. Entered before marking the Due Paid; empty means the whole Amount. One per Due, changed only by undoing Paid and marking it Paid again. Only Credit Cards Dues have one; every other Due is paid in full or not at all.
+What was actually paid on a credit card Due when it is less than its Amount. Entered before marking the Due Paid; empty means the whole Amount. One per Due, changed only by undoing Paid and marking it Paid again. Only credit card Dues have one; every other Due is paid in full or not at all.
 _Avoid_: Partial payment, instalment, minimum payment
 
 **Unpaid Balance**:
-Amount minus Paid Amount on a Paid Credit Cards Due: what the card still holds. Belongs to the Billing Month it was left in and is never moved to the next one, because the card's next statement already includes it. Summed across the Credit Cards Dues of a Billing Month and shown as a warning under Unpaid Remaining, only when it is more than zero.
+Amount minus Paid Amount on a Paid credit card Due: what the card still holds. Belongs to the Billing Month it was left in and is never moved to the next one, because the card's next statement already includes it. Summed across the credit card Dues of a Billing Month and shown as a warning under Unpaid Remaining, only when it is more than zero.
 _Avoid_: Carried over, rollover, balance forward, remainder
 
 **Retired**:
@@ -78,5 +82,5 @@ _Avoid_: Total, balance, outstanding
 A Bill paid from the bank account. The normal case.
 
 **Card-Paid Bill**:
-A Bill settled by charging a credit card (Dance Studio, State University). Tracked only as a reminder, since the money also appears in that card's Due.
+A Bill settled by charging a credit card (Dance Studio, State University). Tracked only as a reminder, since the money also appears in that card's Due. Each Due is Card-Paid as its Bill was when the Due was generated: clearing Card-Paid leaves the existing Dues Card-Paid and the later ones not.
 _Avoid_: Memo, informational, pass-through

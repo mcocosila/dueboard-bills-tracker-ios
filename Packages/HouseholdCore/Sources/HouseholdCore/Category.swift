@@ -13,9 +13,16 @@ public struct Category: Hashable, Identifiable, Sendable {
         self.position = position
     }
 
+    /// The name of the Category whose Bills are credit cards.
+    static let creditCards = "Credit Cards"
+
+    /// Whether this is the Credit Cards Category, whose Bills are credit cards and whose Dues
+    /// take a Paid Amount.
+    public var isCreditCards: Bool { name == Self.creditCards }
+
     /// What a new Household starts with, so nobody starts from a blank page.
     static func suggested() -> [Category] {
-        ["House", "Education", "Credit Cards"].enumerated().map { position, name in
+        ["House", "Education", creditCards].enumerated().map { position, name in
             Category(id: UUID(), name: name, position: position)
         }
     }

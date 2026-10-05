@@ -10,6 +10,8 @@ public struct Bill: Hashable, Identifiable, Sendable {
     public internal(set) var defaultAmount: Decimal?
     /// Recurring when true, Occasional when false.
     public internal(set) var isRecurring: Bool
+    /// Card-Paid when true, Direct when false: its Dues are left out of Unpaid Remaining.
+    public internal(set) var isCardPaid: Bool
     /// A Retired Bill gets no Dues, generated or added by hand, until it is reactivated.
     public internal(set) var isRetired: Bool
     /// Orders the Bills of a Category, lowest first. Each new Bill gets one past every
@@ -18,7 +20,7 @@ public struct Bill: Hashable, Identifiable, Sendable {
 
     public init(
         id: UUID, name: String, categoryID: Category.ID, dueDay: DueDay, defaultAmount: Decimal?,
-        isRecurring: Bool, isRetired: Bool = false, position: Int
+        isRecurring: Bool, isCardPaid: Bool = false, isRetired: Bool = false, position: Int
     ) {
         self.id = id
         self.name = name
@@ -26,6 +28,7 @@ public struct Bill: Hashable, Identifiable, Sendable {
         self.dueDay = dueDay
         self.defaultAmount = defaultAmount
         self.isRecurring = isRecurring
+        self.isCardPaid = isCardPaid
         self.isRetired = isRetired
         self.position = position
     }
@@ -69,10 +72,12 @@ public struct NewBill: Sendable {
     public var defaultAmount: Decimal?
     /// Recurring when true, Occasional when false.
     public var isRecurring: Bool
+    /// Card-Paid when true, Direct when false.
+    public var isCardPaid: Bool
 
     public init(
         name: String, categoryID: Category.ID?, dueDay: Int, dueMonth: DueMonth, defaultAmount: Decimal?,
-        isRecurring: Bool = true
+        isRecurring: Bool = true, isCardPaid: Bool = false
     ) {
         self.name = name
         self.categoryID = categoryID
@@ -80,13 +85,14 @@ public struct NewBill: Sendable {
         self.dueMonth = dueMonth
         self.defaultAmount = defaultAmount
         self.isRecurring = isRecurring
+        self.isCardPaid = isCardPaid
     }
 
     /// The Bill as it is now, to be edited.
     public init(_ bill: Bill) {
         self.init(
             name: bill.name, categoryID: bill.categoryID, dueDay: bill.dueDay.day, dueMonth: bill.dueDay.month,
-            defaultAmount: bill.defaultAmount, isRecurring: bill.isRecurring
+            defaultAmount: bill.defaultAmount, isRecurring: bill.isRecurring, isCardPaid: bill.isCardPaid
         )
     }
 }

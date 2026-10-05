@@ -8,14 +8,14 @@ public protocol HouseholdStore: AnyObject {
     func start(_ household: HouseholdRecords) throws
     /// Keeps a Bill that has just been added.
     func insert(_ bill: Bill) throws
-    /// Keeps a Bill's details, Recurring and Retired as they now are.
+    /// Keeps a Bill's details, Recurring, Card-Paid and Retired as they now are.
     func update(_ bill: Bill) throws
     /// Keeps a Billing Month that has just been opened, with the Dues it was
     /// opened with, all or nothing.
     func open(_ month: BillingMonth, with dues: [Due]) throws
     /// Keeps a Due added by hand to a Billing Month already opened.
     func insert(_ due: Due) throws
-    /// Keeps a Due's Amount and Paid as they now are.
+    /// Keeps a Due's Amount and Paid, with its Paid Amount, as they now are.
     func update(_ due: Due) throws
     /// Forgets a Due removed from its Billing Month.
     func delete(_ dueID: Due.ID) throws

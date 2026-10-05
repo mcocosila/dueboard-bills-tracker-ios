@@ -17,6 +17,7 @@ struct BillFormView: View {
     @State private var dueMonth: DueMonth
     @State private var defaultAmount: Decimal?
     @State private var isRecurring: Bool
+    @State private var isCardPaid: Bool
     @State private var isRetired: Bool
     @State private var refusal: String?
 
@@ -30,6 +31,7 @@ struct BillFormView: View {
         _dueMonth = State(initialValue: details?.dueMonth ?? .sameMonth)
         _defaultAmount = State(initialValue: details?.defaultAmount)
         _isRecurring = State(initialValue: details?.isRecurring ?? true)
+        _isCardPaid = State(initialValue: details?.isCardPaid ?? false)
         _isRetired = State(initialValue: bill?.isRetired ?? false)
     }
 
@@ -66,6 +68,13 @@ struct BillFormView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
+                }
+                Section {
+                    Toggle("Card-Paid", isOn: $isCardPaid)
+                } footer: {
+                    Text(isCardPaid
+                        ? "Charged to a credit card, so its Dues are a reminder only and are left out of Unpaid Remaining."
+                        : "Turn on for a Bill charged to a credit card rather than paid from the bank.")
                 }
                 Section {
                     Toggle("Recurring", isOn: $isRecurring)
@@ -107,7 +116,7 @@ struct BillFormView: View {
         let details = NewBill(
             // A day left empty goes to the core as 0, so it is refused like any day outside 1 to 28.
             name: name, categoryID: categoryID, dueDay: dueDay ?? 0, dueMonth: dueMonth,
-            defaultAmount: defaultAmount, isRecurring: isRecurring
+            defaultAmount: defaultAmount, isRecurring: isRecurring, isCardPaid: isCardPaid
         )
         do {
             if let bill {
