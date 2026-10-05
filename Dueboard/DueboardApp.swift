@@ -5,6 +5,7 @@ import SwiftUI
 struct DueboardApp: App {
     @State private var household: Household?
     @State private var openingError: String?
+    @State private var reminders = ReminderNotifications()
 
     init() {
         do {
@@ -17,7 +18,7 @@ struct DueboardApp: App {
     var body: some Scene {
         WindowGroup {
             if let household = Binding($household) {
-                RootView(household: household)
+                RootView(household: household, reminders: reminders)
             } else {
                 ContentUnavailableView(
                     "Dueboard could not open its data",

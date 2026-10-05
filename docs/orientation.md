@@ -7,9 +7,12 @@ next to it.
 
 ```
 Dueboard.xcodeproj/            The Xcode project: one app target and the shared Dueboard scheme
-Dueboard/                      The app: SwiftUI screens and, later, the CloudKit and notification adapters
+Dueboard/                      The app: SwiftUI screens, the notification adapter and, later, the CloudKit adapter
   DueboardApp.swift            The entry point (@main); opens the Household and shows the first screen
-  RootView.swift               The tabs: the Billing Month and the Bills
+  RootView.swift               The tabs: the Billing Month and the Bills; keeps the notifications matching the
+                               reminder plan and asks for permission the first time there is a Reminder
+  ReminderNotifications.swift  The notification adapter: makes the pending notifications match the reminder
+                               plan, and opens the Billing Month of a tapped notification
   MonthView.swift              The Month board: a Billing Month's Dues by Category, stepping between months,
                                adding a Bill to the month and removing a Due
   BillsView.swift              The Bills list, grouped by Category, with the Retired Bills last
@@ -25,6 +28,7 @@ Packages/HouseholdCore/        The household core, a Swift package of its own
   Tests/HouseholdCoreTests/    Swift Testing tests of the core
 CONTEXT.md                     The glossary; the code uses these words
 docs/xcode-cloud.md            How Xcode Cloud builds, tests and uploads to TestFlight
+docs/manual-checklist.md       What automated tests cannot cover, checked by hand on every TestFlight build
 ci_scripts/                    Scripts Xcode Cloud runs during a build: tests before every archive
 scripts/draw-app-icon.swift    Draws the app icon; rerun from the repo root with swift scripts/draw-app-icon.swift
 ```
@@ -160,6 +164,8 @@ public struct Household {
     public mutating func enterAmount(_ amount: Decimal?, on dueID: Due.ID, by member: String) throws -> Due
     public mutating func markPaid(_ dueID: Due.ID, paying paidAmount: Decimal? = nil, by member: String) throws -> Due
     public mutating func undoPaid(_ dueID: Due.ID) throws -> Due   // the Edit button
+    public var reminderPlan: [Reminder] { get }
+    public var remindedDues: Set<Due.ID> { get }
 }
 ```
 
@@ -207,8 +213,20 @@ core stores things can change without breaking a test. `import HouseholdCore` (n
 it the first time a Due is marked Paid and keeps it on the phone (`MonthView.swift`); sharing will hand the
 member's iCloud name instead.
 
-**What comes next**: later tickets grow this same interface, with outputs such as the reminder plan.
-CloudKit sync and notifications plug in as adapters in the app, outside the core.
+**The reminder plan** is the list of notifications that should be pending now: for each Due that is not
+Paid and whose Bill is not Retired, a `Reminder` at 8:00 in the clock's time zone on the day it becomes Due
+Soon, on its Due Date and on the day after, less those already past, the 64 earliest in fire time order
+(iOS keeps no more for an app). Each has an `id` made from its Due and kind, the same every time the plan is
+made, a `fireDate`, a `title` and a `body`. The core never schedules anything: `ReminderNotifications` in the
+app compares the plan with the phone's pending notifications, removes what is no longer planned or has
+changed, and adds what is missing. It also clears the notifications already shown for a Due no longer among
+`remindedDues`: the Dues not Paid whose Bill is not Retired, which the core answers too. `RootView` runs it
+after launch, after every change to the plan or to `remindedDues` and on coming back to the app; the iCloud
+sync ticket runs it after every incoming sync too, which is how a Due marked Paid on the partner's phone stops
+reminding on this one. With notifications declined it does nothing, and the app works the same.
+
+**What comes next**: later tickets grow this same interface. CloudKit sync plugs in as an adapter in the
+app, outside the core.
 
 **`public`**: Swift hides everything in a module from other modules unless it is marked `public`. The
 app and the tests are other modules, so in the core `public` marks the interface they may use, and anything

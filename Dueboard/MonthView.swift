@@ -8,9 +8,11 @@ import SwiftUI
 /// Paid Amount, and is marked Paid, or Edited, from its row, and its Due Date is coloured
 /// by whether it is Paid, Due Soon or Overdue. A Bill the
 /// month has no Due for is added from the Add menu; a Due that is not Paid is removed
-/// by swiping its row.
+/// by swiping its row. A tapped Reminder's Billing Month is shown in place of the one on screen.
 struct MonthView: View {
     @Binding var household: Household
+    /// The Billing Month of a tapped Reminder, cleared once it is shown.
+    @Binding var monthToOpen: BillingMonth?
     @Environment(\.scenePhase) private var scenePhase
     @State private var month: BillingMonth
     @State private var board: MonthBoard?
@@ -28,8 +30,9 @@ struct MonthView: View {
     /// What to do with the name once it has been entered.
     @State private var waitingForName: ((String) -> Void)?
 
-    init(household: Binding<Household>) {
+    init(household: Binding<Household>, monthToOpen: Binding<BillingMonth?>) {
         _household = household
+        _monthToOpen = monthToOpen
         _month = State(initialValue: household.wrappedValue.currentBillingMonth)
     }
 
@@ -93,6 +96,11 @@ struct MonthView: View {
             // Runs each time the tab appears too, so a month left unopened for want of
             // Bills is opened once some have been added.
             .task(id: month) { showMonth() }
+            .onChange(of: monthToOpen, initial: true) { _, opened in
+                guard let opened else { return }
+                month = opened
+                monthToOpen = nil
+            }
             // Due Soon and Overdue are as of the day the board was made, so coming back to
             // the app on a later day shows them as of that day.
             .onChange(of: scenePhase) { _, phase in
@@ -475,5 +483,5 @@ private extension DueDate {
         ))
         return household
     }()
-    MonthView(household: $household)
+    MonthView(household: $household, monthToOpen: .constant(nil))
 }
