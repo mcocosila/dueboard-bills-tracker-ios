@@ -3,10 +3,12 @@ import SwiftUI
 
 /// The Bills list: every Bill, grouped by Category in Category order, with a
 /// count per Category, and the Retired Bills in a muted group of their own at the
-/// end. A Bill is edited, Retired or reactivated by tapping its row.
+/// end. A Bill is edited, Retired or reactivated by tapping its row. The Categories
+/// are managed from the toolbar.
 struct BillsView: View {
     @Binding var household: Household
     @State private var isAddingBill = false
+    @State private var isManagingCategories = false
     @State private var billBeingEdited: Bill?
 
     var body: some View {
@@ -37,7 +39,11 @@ struct BillsView: View {
             .tint(.primary)
             .navigationTitle("Bills")
             .toolbar {
+                Button("Categories", systemImage: "folder") { isManagingCategories = true }
                 Button("Add a Bill", systemImage: "plus") { isAddingBill = true }
+            }
+            .sheet(isPresented: $isManagingCategories) {
+                CategoriesView(household: $household)
             }
             .sheet(isPresented: $isAddingBill) {
                 BillFormView(household: $household)

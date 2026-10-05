@@ -37,11 +37,60 @@ final class CoreDataHouseholdStore: HouseholdStore {
             for category in records.categories {
                 let stored = StoredCategory(context: context)
                 stored.id = category.id
-                stored.name = category.name
-                stored.position = Int64(category.position)
                 stored.household = household
+                stored.keep(category)
             }
             try context.save()
+        }
+    }
+
+    func insert(_ category: HouseholdCore.Category) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                guard let household = try firstHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+                let stored = StoredCategory(context: context)
+                stored.id = category.id
+                stored.household = household
+                stored.keep(category)
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
+        }
+    }
+
+    func update(_ categories: [HouseholdCore.Category]) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                for category in categories {
+                    try record(StoredCategory.fetchRequest(), withID: category.id, entity: "Category", in: context)
+                        .keep(category)
+                }
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
+        }
+    }
+
+    func deleteCategory(_ categoryID: HouseholdCore.Category.ID) throws {
+        let context = container.viewContext
+        try context.performAndWait {
+            do {
+                let request = StoredCategory.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", categoryID as CVarArg)
+                for stored in try context.fetch(request) {
+                    context.delete(stored)
+                }
+                try context.save()
+            } catch {
+                context.rollback()
+                throw error
+            }
         }
     }
 
@@ -196,6 +245,14 @@ private extension HouseholdCore.Category {
     init(_ stored: StoredCategory) throws {
         guard let id = stored.id, let name = stored.name else { throw DamagedRecord(entity: "Category") }
         self.init(id: id, name: name, position: Int(stored.position))
+    }
+}
+
+private extension StoredCategory {
+    /// Takes the Category's name and position, the parts of a Category that change after it is created.
+    func keep(_ category: HouseholdCore.Category) {
+        name = category.name
+        position = Int64(category.position)
     }
 }
 

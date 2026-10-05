@@ -6,6 +6,12 @@ public protocol HouseholdStore: AnyObject {
     func load() throws -> HouseholdRecords?
     /// Keeps a Household that has just been started.
     func start(_ household: HouseholdRecords) throws
+    /// Keeps a Category that has just been created.
+    func insert(_ category: Category) throws
+    /// Keeps the Categories' names and positions as they now are, all or nothing.
+    func update(_ categories: [Category]) throws
+    /// Forgets a Category that has just been deleted.
+    func deleteCategory(_ categoryID: Category.ID) throws
     /// Keeps a Bill that has just been added.
     func insert(_ bill: Bill) throws
     /// Keeps a Bill's details, Recurring, Card-Paid and Retired as they now are.
@@ -49,6 +55,21 @@ public final class InMemoryHouseholdStore: HouseholdStore {
 
     public func start(_ household: HouseholdRecords) throws {
         self.household = household
+    }
+
+    public func insert(_ category: Category) throws {
+        household?.categories.append(category)
+    }
+
+    public func update(_ categories: [Category]) throws {
+        for category in categories {
+            guard let index = household?.categories.firstIndex(where: { $0.id == category.id }) else { continue }
+            household?.categories[index] = category
+        }
+    }
+
+    public func deleteCategory(_ categoryID: Category.ID) throws {
+        household?.categories.removeAll { $0.id == categoryID }
     }
 
     public func insert(_ bill: Bill) throws {

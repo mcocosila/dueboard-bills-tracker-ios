@@ -29,7 +29,7 @@ The calendar month in which a Due must be paid, and the set of Dues paid from it
 _Avoid_: Period, cycle, template
 
 **Category**:
-A named group of Bills. Each Household has its own Categories, in its own order; a new Household starts with House, Education and Credit Cards as suggestions. The Bills in the Credit Cards Category are the Credit Card Bills.
+A named group of Bills. Each Household has its own Categories, in its own order, and creates, renames, reorders and deletes them; a new Household starts with House, Education and Credit Cards as suggestions. Names are unique within a Household, whatever the case. A Category is deleted only when it holds no Bill, Retired ones included, and no Due: a Due stays in the Category it was generated in when its Bill moves to another. The Bills in the Credit Cards Category are the Credit Card Bills; it is the Category named Credit Cards, whatever the case, so it cannot be renamed to anything else.
 _Avoid_: Group, section, bucket
 
 **Due Day**:
