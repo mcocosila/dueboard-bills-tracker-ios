@@ -213,7 +213,7 @@ it the first time a Due is marked Paid and keeps it on the phone (`MonthView.swi
 member's iCloud name instead.
 
 **The reminder plan** is the list of notifications that should be pending now: for each Due that is not
-Paid and whose Bill is not Retired, a `Reminder` at 9:00 in the clock's time zone on the day it becomes Due
+Paid and whose Bill is not Retired, a `Reminder` at 8:00 in the clock's time zone on the day it becomes Due
 Soon, on its Due Date and on the day after, less those already past, the 64 earliest in fire time order
 (iOS keeps no more for an app). Each has an `id` made from its Due and kind, the same every time the plan is
 made, a `fireDate`, a `title` and a `body`. The core never schedules anything: `ReminderNotifications` in the

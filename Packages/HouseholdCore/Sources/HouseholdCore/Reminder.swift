@@ -39,7 +39,7 @@ public struct Reminder: Hashable, Identifiable, Sendable {
     /// The Billing Month the Due belongs to, which tapping the notification opens.
     public let billingMonth: BillingMonth
     public let kind: Kind
-    /// 9:00 on the Reminder's day, in the clock's time zone.
+    /// 8:00 on the Reminder's day, in the clock's time zone.
     public let fireDate: Date
     /// The Due's name.
     public let title: String
@@ -50,8 +50,8 @@ public struct Reminder: Hashable, Identifiable, Sendable {
     /// 64 pending notifications for an app.
     public static let limit = 64
 
-    /// The hour of the day every Reminder fires at.
-    static let hour = 9
+    /// The hour of the day every Reminder fires at, on the hour.
+    public static let hour = 8
 
     init(of due: Due, kind: Kind, firingAt fireDate: Date) {
         id = "\(due.id.uuidString).\(kind.rawValue)"

@@ -294,7 +294,7 @@ public struct Household {
         return due
     }
 
-    /// The Reminders that should be pending now: at 9:00 in the clock's time zone on the day
+    /// The Reminders that should be pending now: at 8:00 in the clock's time zone on the day
     /// each Due not Paid becomes Due Soon, on its Due Date and on the day after, for the
     /// Dues of Bills not Retired, the earliest `Reminder.limit` still to come.
     public var reminderPlan: [Reminder] {

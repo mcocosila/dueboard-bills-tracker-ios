@@ -32,7 +32,7 @@ struct RootView: View {
         .alert("Reminders", isPresented: $askingForPermission) {
             Button("Continue") { reminders.askPermission(thenMatch: household.reminderPlan) }
         } message: {
-            Text("Dueboard reminds you at 9:00 when a Due becomes Due Soon, on its Due Date and the day after, until it is Paid.")
+            Text("Dueboard reminds you at \(reminderTime) when a Due becomes Due Soon, on its Due Date and the day after, until it is Paid.")
         }
     }
 
@@ -46,6 +46,12 @@ struct RootView: View {
             askingForPermission = true
         }
     }
+}
+
+/// The time of day Reminders fire at, as the phone writes times: "8:00 AM".
+private var reminderTime: String {
+    Calendar.current.date(bySettingHour: Reminder.hour, minute: 0, second: 0, of: .now)?
+        .formatted(date: .omitted, time: .shortened) ?? ""
 }
 
 private enum RootTab: Hashable {

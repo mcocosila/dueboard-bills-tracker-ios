@@ -14,8 +14,8 @@ Set up on phone A, with notifications not yet allowed for Dueboard:
 ### A Reminder fires
 
 1. In Settings > General > Date & Time, turn off Set Automatically and set the date to tomorrow and the time
-   to 8:58, when the Bill is 7 days away.
-2. Wait for 9:00 with the phone locked. A notification arrives titled with the Bill's name: "Due Soon: due in 7
+   to 7:58, when the Bill is 7 days away.
+2. Wait for 8:00 with the phone locked. A notification arrives titled with the Bill's name: "Due Soon: due in 7
    days."
 3. Tap it. Dueboard opens on the Month tab, on the Due's Billing Month, even from the Bills tab.
 4. Turn Set Automatically back on.
@@ -26,10 +26,10 @@ Needs iCloud sync (issue 11) and a shared Household (issue 12).
 
 1. On phone A, with a Due not Paid that is Due Soon, open Dueboard so its Reminders are pending.
 2. On phone B, mark that Due Paid.
-3. On phone A, open Dueboard and wait for the change to arrive. Move the clock to 8:58 on its Due Date as above:
-   no notification arrives at 9:00.
+3. On phone A, open Dueboard and wait for the change to arrive. Move the clock to 7:58 on its Due Date as above:
+   no notification arrives at 8:00.
 4. On phone B, Edit the Due back to not Paid. On phone A, after the change arrives, the Reminder is back: it
-   fires at 9:00 on the Due Date.
+   fires at 8:00 on the Due Date.
 
 ### Declined
 

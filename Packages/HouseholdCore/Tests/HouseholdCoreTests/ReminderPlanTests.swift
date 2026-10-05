@@ -22,17 +22,17 @@ struct ReminderPlanTests {
         return household
     }
 
-    @Test("a Due not Paid is reminded at 9:00 on the day it becomes Due Soon, on its Due Date and the day after")
+    @Test("a Due not Paid is reminded at 8:00 on the day it becomes Due Soon, on its Due Date and the day after")
     func threeRemindersPerDue() throws {
         let household = try household(dueDay: 25)
         let due = try #require(household.reminderPlan.first?.dueID)
 
         let plan = household.reminderPlan
 
-        // 9:00 in New York is 13:00 UTC in September.
+        // 8:00 in New York is 12:00 UTC in September.
         #expect(plan.map(\.kind) == [.dueSoon, .dueDate, .overdue])
         #expect(plan.map(\.fireDate) == [
-            moment("2026-09-18T13:00:00Z"), moment("2026-09-25T13:00:00Z"), moment("2026-09-26T13:00:00Z"),
+            moment("2026-09-18T12:00:00Z"), moment("2026-09-25T12:00:00Z"), moment("2026-09-26T12:00:00Z"),
         ])
         #expect(plan.allSatisfy { $0.dueID == due && $0.billingMonth == .september })
     }
@@ -64,14 +64,14 @@ struct ReminderPlanTests {
         #expect(plan.map(\.body) == ["Due Soon: due in 7 days.", "Due today.", "Overdue: it was due yesterday."])
     }
 
-    @Test("only Reminders still to come are planned: on the Due Date after 9:00 only the day after is left")
+    @Test("only Reminders still to come are planned: on the Due Date after 8:00 only the day after is left")
     func onlyRemindersStillToCome() throws {
-        let beforeNine = try household(dueDay: 25, clock: .at("2026-09-25T12:59:00Z"))
-        let atNine = try household(dueDay: 25, clock: .at("2026-09-25T13:00:00Z"))
+        let beforeEight = try household(dueDay: 25, clock: .at("2026-09-25T11:59:00Z"))
+        let atEight = try household(dueDay: 25, clock: .at("2026-09-25T12:00:00Z"))
         let dayAfterNoon = try household(dueDay: 25, clock: .at("2026-09-26T16:00:00Z"))
 
-        #expect(beforeNine.reminderPlan.map(\.kind) == [.dueDate, .overdue])
-        #expect(atNine.reminderPlan.map(\.kind) == [.overdue])
+        #expect(beforeEight.reminderPlan.map(\.kind) == [.dueDate, .overdue])
+        #expect(atEight.reminderPlan.map(\.kind) == [.overdue])
         #expect(dayAfterNoon.reminderPlan.isEmpty)
     }
 
@@ -126,28 +126,28 @@ struct ReminderPlanTests {
         #expect(household.reminderPlan.map(\.kind) == [.dueSoon, .dueDate, .overdue])
     }
 
-    @Test("Reminders fire at 9:00 in the clock's time zone, wherever that is")
+    @Test("Reminders fire at 8:00 in the clock's time zone, wherever that is")
     func nineInTheClocksTimeZone() throws {
         let tokyo = try household(dueDay: 25, clock: .at("2026-09-15T03:00:00Z", in: "Asia/Tokyo"))
         let london = try household(dueDay: 25, clock: .at("2026-09-15T12:00:00Z", in: "Europe/London"))
 
-        // 9:00 in Tokyo is 0:00 UTC; 9:00 in London in summer is 8:00 UTC.
+        // 8:00 in Tokyo is 23:00 UTC the day before; 8:00 in London in summer is 7:00 UTC.
         #expect(tokyo.reminderPlan.map(\.fireDate) == [
-            moment("2026-09-18T00:00:00Z"), moment("2026-09-25T00:00:00Z"), moment("2026-09-26T00:00:00Z"),
+            moment("2026-09-17T23:00:00Z"), moment("2026-09-24T23:00:00Z"), moment("2026-09-25T23:00:00Z"),
         ])
         #expect(london.reminderPlan.map(\.fireDate) == [
-            moment("2026-09-18T08:00:00Z"), moment("2026-09-25T08:00:00Z"), moment("2026-09-26T08:00:00Z"),
+            moment("2026-09-18T07:00:00Z"), moment("2026-09-25T07:00:00Z"), moment("2026-09-26T07:00:00Z"),
         ])
     }
 
-    @Test("9:00 stays 9:00 across a change of clocks: Due Soon before it in summer time, Due Date after it in winter time")
+    @Test("8:00 stays 8:00 across a change of clocks: Due Soon before it in summer time, Due Date after it in winter time")
     func acrossAChangeOfClocks() throws {
         // New York leaves summer time on November 1, 2026.
         let clock = WallClock.at("2026-10-20T12:00:00Z")
         let household = try household(dueDay: 3, .nextMonth, in: .october, clock: clock)
 
         #expect(household.reminderPlan.map(\.fireDate) == [
-            moment("2026-10-27T13:00:00Z"), moment("2026-11-03T14:00:00Z"), moment("2026-11-04T14:00:00Z"),
+            moment("2026-10-27T12:00:00Z"), moment("2026-11-03T13:00:00Z"), moment("2026-11-04T13:00:00Z"),
         ])
     }
 
@@ -156,7 +156,7 @@ struct ReminderPlanTests {
         let household = try household(dueDay: 3, .nextMonth)
 
         #expect(household.reminderPlan.map(\.fireDate) == [
-            moment("2026-09-26T13:00:00Z"), moment("2026-10-03T13:00:00Z"), moment("2026-10-04T13:00:00Z"),
+            moment("2026-09-26T12:00:00Z"), moment("2026-10-03T12:00:00Z"), moment("2026-10-04T12:00:00Z"),
         ])
         #expect(household.reminderPlan.allSatisfy { $0.billingMonth == .september })
     }
@@ -168,9 +168,9 @@ struct ReminderPlanTests {
 
         let household = try household(dueDay: 28, in: february, clock: clock)
 
-        // New York is on winter time: 9:00 is 14:00 UTC.
+        // New York is on winter time: 8:00 is 13:00 UTC.
         #expect(household.reminderPlan.map(\.fireDate) == [
-            moment("2027-02-21T14:00:00Z"), moment("2027-02-28T14:00:00Z"), moment("2027-03-01T14:00:00Z"),
+            moment("2027-02-21T13:00:00Z"), moment("2027-02-28T13:00:00Z"), moment("2027-03-01T13:00:00Z"),
         ])
     }
 
@@ -182,7 +182,7 @@ struct ReminderPlanTests {
         let household = try household(dueDay: 4, .nextMonth, in: december, clock: clock)
 
         #expect(household.reminderPlan.map(\.fireDate) == [
-            moment("2026-12-28T14:00:00Z"), moment("2027-01-04T14:00:00Z"), moment("2027-01-05T14:00:00Z"),
+            moment("2026-12-28T13:00:00Z"), moment("2027-01-04T13:00:00Z"), moment("2027-01-05T13:00:00Z"),
         ])
     }
 
@@ -211,7 +211,7 @@ struct ReminderPlanTests {
         _ = try household.openBillingMonth(.september)
         _ = try household.openBillingMonth(.october)
         // 11 Dues in each month, 3 Reminders each: 66, so 2 of October 26 are left out.
-        let october26 = moment("2026-10-26T13:00:00Z")
+        let october26 = moment("2026-10-26T12:00:00Z")
 
         #expect(household.reminderPlan.count == Reminder.limit)
         #expect(Reminder.limit == 64)
