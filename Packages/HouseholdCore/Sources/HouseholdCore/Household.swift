@@ -29,6 +29,18 @@ public struct Household {
         records.categories.sorted { $0.position < $1.position }
     }
 
+    /// Creates a Category, last in the order.
+    @discardableResult
+    public mutating func addCategory(named name: String) throws -> Category {
+        let category = Category(
+            id: UUID(), name: try checkedName(name),
+            position: (records.categories.map(\.position).max() ?? -1) + 1
+        )
+        try store.insert(category)
+        records.categories.append(category)
+        return category
+    }
+
     /// Adds a Bill, Recurring unless it is filled in as Occasional, last in its Category.
     @discardableResult
     public mutating func addBill(_ new: NewBill) throws -> Bill {
@@ -72,6 +84,71 @@ public struct Household {
     @discardableResult
     public mutating func reactivateBill(_ billID: Bill.ID) throws -> Bill {
         try changeBill(billID) { bill in bill.isRetired = false }
+    }
+
+    /// Renames a Category. Its Bills and Dues stay in it and show the new name. Credit Cards
+    /// keeps its name, since that name is what makes its Bills credit cards.
+    @discardableResult
+    public mutating func renameCategory(_ categoryID: Category.ID, to name: String) throws -> Category {
+        let index = try categoryIndex(categoryID)
+        var category = records.categories[index]
+        category.name = try checkedName(name, of: categoryID)
+        if records.categories[index].isCreditCards && !category.isCreditCards {
+            throw CategoryRefusal.creditCardsRenamed
+        }
+        try store.update([category])
+        records.categories[index] = category
+        return category
+    }
+
+    /// Puts the Categories in the order given, which names every Category once. The Bills list
+    /// and the Billing Months follow it.
+    public mutating func reorderCategories(_ order: [Category.ID]) throws {
+        guard order.count == records.categories.count,
+              Set(order) == Set(records.categories.map(\.id))
+        else { throw CategoryRefusal.categoriesChanged }
+        let reordered = order.enumerated().map { position, id in
+            var category = records.categories.first { $0.id == id }!
+            category.position = position
+            return category
+        }
+        try store.update(reordered)
+        records.categories = reordered
+    }
+
+    /// Deletes a Category that holds nothing: no Bill, Retired ones included, and no Due, which
+    /// stays in the Category it was generated in when its Bill moves to another.
+    public mutating func deleteCategory(_ categoryID: Category.ID) throws {
+        let index = try categoryIndex(categoryID)
+        let name = records.categories[index].name
+        let bills = records.bills.count { $0.categoryID == categoryID }
+        guard bills == 0 else { throw CategoryRefusal.holdsBills(category: name, count: bills) }
+        guard !records.dues.contains(where: { $0.categoryID == categoryID }) else {
+            throw CategoryRefusal.holdsDues(category: name)
+        }
+        try store.deleteCategory(categoryID)
+        records.categories.remove(at: index)
+    }
+
+    /// Where the Category with the id given sits in the records.
+    private func categoryIndex(_ categoryID: Category.ID) throws -> Int {
+        guard let index = records.categories.firstIndex(where: { $0.id == categoryID }) else {
+            throw CategoryRefusal.noSuchCategory
+        }
+        return index
+    }
+
+    /// The Category name filled in, once it is checked against the rules: not empty, and
+    /// unlike the name of every other Category, whatever the case.
+    private func checkedName(_ name: String, of categoryID: Category.ID? = nil) throws -> String {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw CategoryRefusal.noName }
+        if let other = records.categories.first(where: {
+            $0.id != categoryID && $0.name.caseInsensitiveCompare(name) == .orderedSame
+        }) {
+            throw CategoryRefusal.nameTaken(other.name)
+        }
+        return name
     }
 
     /// The name, Category and Due Day filled in, once each is checked against the rules.

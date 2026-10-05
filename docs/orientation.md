@@ -14,6 +14,7 @@ Dueboard/                      The app: SwiftUI screens and, later, the CloudKit
                                adding a Bill to the month and removing a Due
   BillsView.swift              The Bills list, grouped by Category, with the Retired Bills last
   BillFormView.swift           The form for adding or editing a Bill, and Retiring or reactivating it
+  CategoriesView.swift         Creating, renaming, reordering and deleting Categories, from the Bills tab
   CoreDataHouseholdStore.swift Keeps the Household in Core Data on the phone
   Dueboard.xcdatamodeld        The Core Data model, one version per change: Household, Category, Bill,
                                Billing Month and Due
@@ -143,6 +144,10 @@ Its shape so far:
 public struct Household {
     public static func open(in store: HouseholdStore, clock: WallClock) throws -> Household
     public var categories: [Category] { get }
+    public mutating func addCategory(named name: String) throws -> Category
+    public mutating func renameCategory(_ categoryID: Category.ID, to name: String) throws -> Category
+    public mutating func reorderCategories(_ order: [Category.ID]) throws
+    public mutating func deleteCategory(_ categoryID: Category.ID) throws
     public var billsList: BillsList { get }
     public mutating func addBill(_ new: NewBill) throws -> Bill
     public mutating func editBill(_ billID: Bill.ID, to details: NewBill) throws -> Bill
