@@ -74,6 +74,10 @@ _Avoid_: Late, missed
 A Due that is not Paid and whose Due Date is today or within the next 7 days. Derived, never set by hand.
 _Avoid_: Upcoming, pending, imminent
 
+**Reminder**:
+A notification planned from a Due's state, at 9:00 local time on the day the Due becomes Due Soon, on its Due Date and on the day after. Only for Dues that are not Paid and whose Bill is not Retired; marking the Due Paid, by anyone in the Household, takes its Reminders away, and Edit brings them back. The phone keeps at most the 64 earliest.
+_Avoid_: Alert, alarm, nudge, push
+
 **Unpaid Remaining**:
 The one number shown per Billing Month: the sum of Amounts on Dues that are not Paid, excluding Card-Paid Bills. Reaches zero when every Due is Paid, whatever Unpaid Balance the cards still hold.
 _Avoid_: Total, balance, outstanding

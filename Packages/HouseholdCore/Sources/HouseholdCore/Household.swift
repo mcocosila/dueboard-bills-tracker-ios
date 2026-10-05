@@ -294,6 +294,13 @@ public struct Household {
         return due
     }
 
+    /// The Reminders that should be pending now: at 9:00 in the clock's time zone on the day
+    /// each Due not Paid becomes Due Soon, on its Due Date and on the day after, for the
+    /// Dues of Bills not Retired, the earliest `Reminder.limit` still to come.
+    public var reminderPlan: [Reminder] {
+        Reminder.plan(for: records.dues, bills: records.bills, at: clock.now, in: clock.calendar)
+    }
+
     /// The Billing Month that "now" falls in, in the clock's time zone.
     public var currentBillingMonth: BillingMonth {
         let today = DueDate(of: clock.now, in: clock.calendar)
