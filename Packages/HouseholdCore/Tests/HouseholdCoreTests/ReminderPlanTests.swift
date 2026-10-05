@@ -46,10 +46,14 @@ struct ReminderPlanTests {
         _ = try household.openBillingMonth(.october)
 
         let ids = household.reminderPlan.map(\.id)
-        let reopened = try Household.open(in: store, clock: .at("2026-09-20T12:00:00Z"))
+        let reopened = try Household.open(in: store, clock: .testing)
+        let later = try Household.open(in: store, clock: .at("2026-10-05T12:00:00Z"))
 
         #expect(Set(ids).count == ids.count)
-        #expect(Set(reopened.reminderPlan.map(\.id)).isSubset(of: Set(ids)))
+        #expect(reopened.reminderPlan.map(\.id) == ids)
+        // Later, the Reminders still to come keep their identifiers.
+        #expect(later.reminderPlan.map(\.id) == ids.filter { id in later.reminderPlan.contains { $0.id == id } })
+        #expect(later.reminderPlan.count < ids.count)
     }
 
     @Test("each Reminder names its Due and says why it is sent")

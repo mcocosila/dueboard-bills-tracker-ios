@@ -7,13 +7,14 @@ checked against this list on two phones, and issue 14 gathers the steps of the o
 
 Set up on phone A, with notifications not yet allowed for Dueboard:
 
-1. Add a Bill due 8 days from today and open the Month board. An alert explains the Reminders; Continue
+1. Add a Bill due 8 days from today and open the Month board. A dialog explains the Reminders; Continue
    brings the phone's own question. Allow it.
 2. Settings > Notifications > Dueboard is on.
 
 ### A Reminder fires
 
-1. In Settings > General > Date & Time, turn off Set Automatically and set the date to tomorrow and the time to 8:58, when the Bill is 7 days away.
+1. In Settings > General > Date & Time, turn off Set Automatically and set the date to tomorrow and the time
+   to 8:58, when the Bill is 7 days away.
 2. Wait for 9:00 with the phone locked. A notification arrives titled with the Bill's name: "Due Soon: due in 7
    days."
 3. Tap it. Dueboard opens on the Month tab, on the Due's Billing Month, even from the Bills tab.

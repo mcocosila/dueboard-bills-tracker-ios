@@ -12,6 +12,24 @@ public struct Reminder: Hashable, Identifiable, Sendable {
         case dueDate
         /// On the day after its Due Date, when it is Overdue.
         case overdue
+
+        /// How many days after the Due Date the Reminder fires, before it when negative.
+        var daysAfterDueDate: Int {
+            switch self {
+            case .dueSoon: -DueState.dueSoonDays
+            case .dueDate: 0
+            case .overdue: 1
+            }
+        }
+
+        /// Why the Reminder is sent.
+        var body: String {
+            switch self {
+            case .dueSoon: "Due Soon: due in \(DueState.dueSoonDays) days."
+            case .dueDate: "Due today."
+            case .overdue: "Overdue: it was due yesterday."
+            }
+        }
     }
 
     /// The same for a Due and kind every time the plan is made, so the adapter can tell
@@ -42,11 +60,7 @@ public struct Reminder: Hashable, Identifiable, Sendable {
         self.kind = kind
         self.fireDate = fireDate
         title = due.name
-        body = switch kind {
-        case .dueSoon: "Due Soon: due in \(DueState.dueSoonDays) days."
-        case .dueDate: "Due today."
-        case .overdue: "Overdue: it was due yesterday."
-        }
+        body = kind.body
     }
 
     /// The Reminders that should be pending at `now`: three for every Due that is not Paid
@@ -55,8 +69,8 @@ public struct Reminder: Hashable, Identifiable, Sendable {
     static func plan(for dues: [Due], bills: [Bill], at now: Date, in calendar: Calendar) -> [Reminder] {
         let retired = Set(bills.filter(\.isRetired).map(\.id))
         let reminders = dues.filter { $0.paid == nil && !retired.contains($0.billID) }.flatMap { due in
-            [(Kind.dueSoon, -DueState.dueSoonDays), (.dueDate, 0), (.overdue, 1)].compactMap { kind, days -> Reminder? in
-                let fireDate = due.dueDate.at(hour: hour, shiftedBy: days, in: calendar)
+            [Kind.dueSoon, .dueDate, .overdue].compactMap { kind -> Reminder? in
+                let fireDate = due.dueDate.at(hour: hour, shiftedBy: kind.daysAfterDueDate, in: calendar)
                 return fireDate > now ? Reminder(of: due, kind: kind, firingAt: fireDate) : nil
             }
         }

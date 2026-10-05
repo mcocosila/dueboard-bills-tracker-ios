@@ -36,14 +36,14 @@ struct RootView: View {
         }
     }
 
-    /// Makes the pending notifications match the plan, first asking for permission when
-    /// there is a Reminder to send and the phone has not been asked yet.
+    /// Makes the pending notifications match the plan, and asks for permission when there is
+    /// a Reminder to send and the phone has not been asked yet. The plan is handed on before
+    /// anything is awaited, so a later change never overtakes it.
     private func matchReminders() async {
         let plan = household.reminderPlan
+        reminders.match(plan)
         if !plan.isEmpty, await reminders.permissionNotAsked() {
             askingForPermission = true
-        } else {
-            reminders.match(plan)
         }
     }
 }
