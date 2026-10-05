@@ -20,6 +20,12 @@ Set up on phone A, with notifications not yet allowed for Dueboard:
 3. Tap it. Dueboard opens on the Month tab, on the Due's Billing Month, even from the Bills tab.
 4. Turn Set Automatically back on.
 
+### A Reminder already shown is cleared once its Due is Paid
+
+1. Let a Reminder fire as above and leave it in Notification Center, without tapping it.
+2. Open Dueboard from its icon and mark that Due Paid.
+3. Notification Center no longer shows the Reminder.
+
 ### A Reminder disappears after the partner marks Paid
 
 Needs iCloud sync (issue 11) and a shared Household (issue 12).

@@ -3,8 +3,9 @@ import Observation
 import UserNotifications
 
 /// The notification adapter: makes the phone's pending notifications match the household
-/// core's reminder plan, adding what is missing and removing what is no longer planned, and
-/// hands on the Billing Month of a notification that is tapped. It holds no rules: which
+/// core's reminder plan, adding what is missing and removing what is no longer planned, clears
+/// the notifications already shown for Dues no longer reminded, and hands on the Billing Month
+/// of a notification that is tapped. It holds no rules: which
 /// Reminders exist, when and with what text is the core's answer.
 @MainActor @Observable
 final class ReminderNotifications: NSObject, UNUserNotificationCenterDelegate {
@@ -28,24 +29,25 @@ final class ReminderNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Asks the phone to allow notifications, then makes the pending ones match `plan`.
-    func askPermission(thenMatch plan: [Reminder]) {
+    func askPermission(thenMatch plan: [Reminder], reminding remindedDues: Set<Due.ID>) {
         Task {
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
-            match(plan)
+            match(plan, reminding: remindedDues)
         }
     }
 
-    /// Makes the pending notifications match `plan`. Does nothing while notifications are
-    /// declined or not allowed yet: the app works the same without them.
-    func match(_ plan: [Reminder]) {
+    /// Makes the pending notifications match `plan`, and clears those already shown for a Due
+    /// not among `remindedDues`: Paid, removed or Retired since. Does nothing while
+    /// notifications are declined or not allowed yet: the app works the same without them.
+    func match(_ plan: [Reminder], reminding remindedDues: Set<Due.ID>) {
         let previous = lastMatch
         lastMatch = Task {
             await previous?.value
-            await replacePending(with: plan)
+            await replacePending(with: plan, reminding: remindedDues)
         }
     }
 
-    private func replacePending(with plan: [Reminder]) async {
+    private func replacePending(with plan: [Reminder], reminding remindedDues: Set<Due.ID>) async {
         let status = await center.notificationSettings().authorizationStatus
         guard [.authorized, .provisional, .ephemeral].contains(status) else { return }
         let planned = Dictionary(uniqueKeysWithValues: plan.map { ($0.id, $0) })
@@ -58,6 +60,9 @@ final class ReminderNotifications: NSObject, UNUserNotificationCenterDelegate {
         for reminder in plan where !kept.contains(reminder.id) {
             try? await center.add(UNNotificationRequest(reminder))
         }
+        let shown = await center.deliveredNotifications().map(\.request)
+        let done = shown.filter { request in request.dueID.map { !remindedDues.contains($0) } ?? false }
+        center.removeDeliveredNotifications(withIdentifiers: done.map(\.identifier))
     }
 
     /// A notification tapped opens its Due's Billing Month.
@@ -91,6 +96,11 @@ private extension UNNotificationRequest {
         )
     }
 
+    /// The Due this notification reminds of, or nil for one that does not say.
+    var dueID: Due.ID? {
+        (content.userInfo[dueIDKey] as? String).flatMap(UUID.init(uuidString:))
+    }
+
     /// Whether this pending notification is the one `reminder` plans: same time and text.
     func notifies(_ reminder: Reminder) -> Bool {
         content.title == reminder.title && content.body == reminder.body
@@ -99,10 +109,13 @@ private extension UNNotificationRequest {
 }
 
 private extension Reminder {
-    /// What the notification carries for the tap: the Billing Month to open, and the fire
-    /// time it was planned for.
+    /// What the notification carries: the Billing Month to open when it is tapped, the fire
+    /// time it was planned for, and its Due, to clear it once the Due is no longer reminded.
     var userInfo: [String: Any] {
-        [yearKey: billingMonth.year, monthKey: billingMonth.month, fireDateKey: fireDate.timeIntervalSince1970]
+        [
+            yearKey: billingMonth.year, monthKey: billingMonth.month, fireDateKey: fireDate.timeIntervalSince1970,
+            dueIDKey: dueID.uuidString,
+        ]
     }
 }
 
@@ -117,3 +130,4 @@ private extension BillingMonth {
 private let yearKey = "billingMonthYear"
 private let monthKey = "billingMonthMonth"
 private let fireDateKey = "fireDate"
+private let dueIDKey = "dueID"

@@ -67,8 +67,7 @@ public struct Reminder: Hashable, Identifiable, Sendable {
     /// and whose Bill is not Retired, less those whose time has passed, the earliest
     /// `limit` of them in fire time order.
     static func plan(for dues: [Due], bills: [Bill], at now: Date, in calendar: Calendar) -> [Reminder] {
-        let retired = Set(bills.filter(\.isRetired).map(\.id))
-        let reminders = dues.filter { $0.paid == nil && !retired.contains($0.billID) }.flatMap { due in
+        let reminders = reminded(dues, bills: bills).flatMap { due in
             [Kind.dueSoon, .dueDate, .overdue].compactMap { kind -> Reminder? in
                 let fireDate = due.dueDate.at(hour: hour, shiftedBy: kind.daysAfterDueDate, in: calendar)
                 return fireDate > now ? Reminder(of: due, kind: kind, firingAt: fireDate) : nil
@@ -78,6 +77,13 @@ public struct Reminder: Hashable, Identifiable, Sendable {
             .sorted { ($0.fireDate, $0.billingMonth, $0.title, $0.id) < ($1.fireDate, $1.billingMonth, $1.title, $1.id) }
             .prefix(limit)
             .map(\.self)
+    }
+
+    /// The Dues Reminders are for: those not Paid whose Bill is not Retired, whether or not
+    /// any of their Reminders is still to come.
+    static func reminded(_ dues: [Due], bills: [Bill]) -> [Due] {
+        let retired = Set(bills.filter(\.isRetired).map(\.id))
+        return dues.filter { $0.paid == nil && !retired.contains($0.billID) }
     }
 }
 

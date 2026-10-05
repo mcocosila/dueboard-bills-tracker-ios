@@ -301,6 +301,13 @@ public struct Household {
         Reminder.plan(for: records.dues, bills: records.bills, at: clock.now, in: clock.calendar)
     }
 
+    /// The Dues Reminders are for: those not Paid whose Bill is not Retired, even once their
+    /// Reminders have all passed. A notification already shown for any other Due, Paid,
+    /// removed or Retired since, is cleared from the phone.
+    public var remindedDues: Set<Due.ID> {
+        Set(Reminder.reminded(records.dues, bills: records.bills).map(\.id))
+    }
+
     /// The Billing Month that "now" falls in, in the clock's time zone.
     public var currentBillingMonth: BillingMonth {
         let today = DueDate(of: clock.now, in: clock.calendar)

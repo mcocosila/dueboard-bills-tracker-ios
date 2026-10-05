@@ -223,4 +223,32 @@ struct ReminderPlanTests {
         #expect(household.reminderPlan.count == 63)
         #expect(household.reminderPlan.count { $0.fireDate == october26 } == 11)
     }
+
+    @Test("the reminded Dues are those not Paid whose Bill is not Retired, even once their Reminders have all passed")
+    func remindedDues() throws {
+        // On September 30 City Power, due September 25, has no Reminder left to come.
+        var household = try household(dueDay: 25, clock: .at("2026-09-30T16:00:00Z"))
+        let due = try household.due(named: "City Power")
+        #expect(household.reminderPlan.isEmpty)
+        #expect(household.remindedDues == [due.id])
+
+        try household.markPaid(due.id, by: "Mircea")
+        #expect(household.remindedDues.isEmpty)
+
+        try household.undoPaid(due.id)
+        #expect(household.remindedDues == [due.id])
+    }
+
+    @Test("a removed Due and a Retired Bill's Dues are no longer reminded")
+    func notRemindedOnceRemovedOrRetired() throws {
+        var household = try household(dueDay: 25)
+        try household.addBill(.plumber(in: household))
+        let plumber = try household.addDue(of: household.bill(named: "Plumber").id, to: .september)
+
+        try household.removeDue(try household.due(named: "City Power").id)
+        #expect(household.remindedDues == [plumber.id])
+
+        try household.retireBill(household.bill(named: "Plumber").id)
+        #expect(household.remindedDues.isEmpty)
+    }
 }

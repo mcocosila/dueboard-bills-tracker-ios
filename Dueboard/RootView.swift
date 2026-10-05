@@ -22,6 +22,9 @@ struct RootView: View {
         }
         .task { await matchReminders() }
         .onChange(of: household.reminderPlan) { Task { await matchReminders() } }
+        // A Due Paid after its last Reminder leaves the plan as it was, but its notification
+        // still has to be cleared.
+        .onChange(of: household.remindedDues) { Task { await matchReminders() } }
         // Reminders whose time has passed drop out of the plan as the days go by.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await matchReminders() } }
@@ -30,7 +33,7 @@ struct RootView: View {
             if month != nil { tab = .month }
         }
         .alert("Reminders", isPresented: $askingForPermission) {
-            Button("Continue") { reminders.askPermission(thenMatch: household.reminderPlan) }
+            Button("Continue") { reminders.askPermission(thenMatch: household.reminderPlan, reminding: household.remindedDues) }
         } message: {
             Text("Dueboard reminds you at \(reminderTime) when a Due becomes Due Soon, on its Due Date and the day after, until it is Paid.")
         }
@@ -41,7 +44,7 @@ struct RootView: View {
     /// anything is awaited, so a later change never overtakes it.
     private func matchReminders() async {
         let plan = household.reminderPlan
-        reminders.match(plan)
+        reminders.match(plan, reminding: household.remindedDues)
         if !plan.isEmpty, await reminders.permissionNotAsked() {
             askingForPermission = true
         }

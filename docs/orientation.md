@@ -165,6 +165,7 @@ public struct Household {
     public mutating func markPaid(_ dueID: Due.ID, paying paidAmount: Decimal? = nil, by member: String) throws -> Due
     public mutating func undoPaid(_ dueID: Due.ID) throws -> Due   // the Edit button
     public var reminderPlan: [Reminder] { get }
+    public var remindedDues: Set<Due.ID> { get }
 }
 ```
 
@@ -218,10 +219,11 @@ Soon, on its Due Date and on the day after, less those already past, the 64 earl
 (iOS keeps no more for an app). Each has an `id` made from its Due and kind, the same every time the plan is
 made, a `fireDate`, a `title` and a `body`. The core never schedules anything: `ReminderNotifications` in the
 app compares the plan with the phone's pending notifications, removes what is no longer planned or has
-changed, and adds what is missing. `RootView` runs it after launch, after every change to the plan and on
-coming back to the app; the iCloud sync ticket runs it after every incoming sync too, which is how a Due
-marked Paid on the partner's phone stops reminding on this one. With notifications declined it does nothing,
-and the app works the same.
+changed, and adds what is missing. It also clears the notifications already shown for a Due no longer among
+`remindedDues`: the Dues not Paid whose Bill is not Retired, which the core answers too. `RootView` runs it
+after launch, after every change to the plan or to `remindedDues` and on coming back to the app; the iCloud
+sync ticket runs it after every incoming sync too, which is how a Due marked Paid on the partner's phone stops
+reminding on this one. With notifications declined it does nothing, and the app works the same.
 
 **What comes next**: later tickets grow this same interface. CloudKit sync plugs in as an adapter in the
 app, outside the core.

@@ -75,7 +75,7 @@ A Due that is not Paid and whose Due Date is today or within the next 7 days. De
 _Avoid_: Upcoming, pending, imminent
 
 **Reminder**:
-A notification planned from a Due's state, at 8:00 local time on the day the Due becomes Due Soon, on its Due Date and on the day after. Only for Dues that are not Paid and whose Bill is not Retired; marking the Due Paid, by anyone in the Household, takes its Reminders away, and Edit brings them back. The phone keeps at most the 64 earliest.
+A notification planned from a Due's state, at 8:00 local time on the day the Due becomes Due Soon, on its Due Date and on the day after. Only for Dues that are not Paid and whose Bill is not Retired; marking the Due Paid, by anyone in the Household, takes its Reminders away, along with any already shown, and Edit brings back those still to come. The phone keeps at most the 64 earliest.
 _Avoid_: Alert, alarm, nudge, push
 
 **Unpaid Remaining**:
