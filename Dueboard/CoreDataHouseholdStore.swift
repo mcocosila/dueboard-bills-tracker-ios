@@ -110,9 +110,21 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
               let transactions = result.result as? [NSPersistentHistoryTransaction]
         else { return }
         if let last = transactions.last { historyRead = last.token }
+        purgeHistoryRead()
         guard transactions.contains(where: { $0.author != Self.author }) else { return }
         _ = try? mergeDuplicates()
         changedElsewhere?()
+    }
+
+    /// Deletes history this phone is done with, so it does not grow for good. Only what is a
+    /// week old goes: the phone reads history as it is written, from launch on, so nothing
+    /// that old is still to be read, and the iCloud mirroring, which reads the same history to
+    /// send this phone's changes, has had time to send them. Deleting right up to the last
+    /// change read could take changes it has not sent yet, made while offline, and have it
+    /// sync everything again.
+    private func purgeHistoryRead() {
+        let weekAgo = Date.now.addingTimeInterval(-7 * 24 * 60 * 60)
+        _ = try? container.viewContext.execute(NSPersistentHistoryChangeRequest.deleteHistory(before: weekAgo))
     }
 
     func load() throws -> HouseholdRecords? {
