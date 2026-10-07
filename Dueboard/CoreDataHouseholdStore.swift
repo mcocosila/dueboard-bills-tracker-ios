@@ -33,9 +33,10 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
     /// device from one of its own.
     private var historyRead: NSPersistentHistoryToken?
     private var remoteChanges: (any NSObjectProtocol)?
-    /// Called on the main thread once a change from another device has been taken in, and
-    /// any duplicates it brought have been merged.
-    var changedElsewhere: (@MainActor () -> Void)?
+    /// Called once the stored Household has changed other than through the command that was
+    /// just run: a change from another device taken in, or duplicates merged, whether iCloud
+    /// brought them or this phone made one. The Household is to be read again.
+    var householdChanged: (() -> Void)?
 
     /// Opens the stores in the app's own storage on this phone, syncing with the Member's
     /// private and shared iCloud databases. Signed out of iCloud, they work the same on this
@@ -54,7 +55,7 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
         // The shared store sits beside it, with the same options but the shared database.
         guard let privateURL = privateDescription.url,
               let sharedDescription = privateDescription.copy() as? NSPersistentStoreDescription
-        else { throw DamagedRecord(entity: "store") }
+        else { throw StoreNotLoaded(store: "private") }
         let sharedURL = privateURL.deletingLastPathComponent().appending(path: "Dueboard-shared.sqlite")
         sharedDescription.url = sharedURL
         let sharedOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: Self.iCloudContainer)
@@ -68,9 +69,12 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
         }
         if let loadError { throw loadError }
         let coordinator = container.persistentStoreCoordinator
-        guard let privateStore = coordinator.persistentStore(for: privateURL),
-              let sharedStore = coordinator.persistentStore(for: sharedURL)
-        else { throw DamagedRecord(entity: "store") }
+        guard let privateStore = coordinator.persistentStore(for: privateURL) else {
+            throw StoreNotLoaded(store: "private")
+        }
+        guard let sharedStore = coordinator.persistentStore(for: sharedURL) else {
+            throw StoreNotLoaded(store: "shared")
+        }
         self.privateStore = privateStore
         self.sharedStore = sharedStore
         #if DEBUG
@@ -113,7 +117,7 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
         purgeHistoryRead()
         guard transactions.contains(where: { $0.author != Self.author }) else { return }
         _ = try? mergeDuplicates()
-        changedElsewhere?()
+        householdChanged?()
     }
 
     /// Deletes history this phone is done with, so it does not grow for good. Only what is a
@@ -261,7 +265,7 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
                 format: "household == %@ AND year == %d AND month == %d",
                 household, due.billingMonth.year, due.billingMonth.month
             )
-            request.affectedStores = [household.objectID.persistentStore ?? privateStore]
+            request.affectedStores = [try shownStore(in: context)]
             guard let month = try context.fetch(request).first else { throw DamagedRecord(entity: "Billing Month") }
             let bill = try record(StoredBill.fetchRequest(), withID: due.billID, entity: "Bill", in: context)
             let category = try record(
@@ -333,7 +337,7 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
     private func mergeDuplicatesMadeHere() {
         Task { @MainActor [weak self] in
             guard let self, (try? mergeDuplicates()) == true else { return }
-            changedElsewhere?()
+            householdChanged?()
         }
     }
 
@@ -464,6 +468,14 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
             uniquingKeysWith: { first, _ in first }
         )
     }
+}
+
+/// One of the stores on this phone did not load: the private one, which keeps this Member's
+/// own Household, or the shared one, which keeps a Household they were invited to.
+struct StoreNotLoaded: LocalizedError {
+    let store: String
+
+    var errorDescription: String? { "The \(store) store on this device could not be opened." }
 }
 
 /// A stored record is missing something every record of its kind has. The store

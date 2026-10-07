@@ -121,7 +121,7 @@ struct MonthView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { showMonth() }
             }
-            // A change synced from another device, such as a Due marked Paid there.
+            // A change in the store, such as a Due marked Paid on another device.
             .onChange(of: householdReadAgain) { showMonth() }
             .confirmationDialog(
                 "Remove \(dueBeingRemoved?.name ?? "") from \(month.title)?",

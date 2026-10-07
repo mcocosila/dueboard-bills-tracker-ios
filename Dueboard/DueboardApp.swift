@@ -27,14 +27,15 @@ struct DueboardApp: App {
     }
 }
 
-/// The Household as the store on this phone keeps it, read again whenever iCloud brings in
-/// a change made on another device, and how this Member shares it: inviting others to it,
+/// The Household as the store on this phone keeps it, read again whenever it changes there
+/// other than through a command on screen, such as a change iCloud brings in from another
+/// device or duplicates merged, and how this Member shares it: inviting others to it,
 /// joining one they were invited to, and leaving it or stopping sharing it.
 @MainActor @Observable
 final class OpenedHousehold {
     var household: Household?
     private(set) var openingError: String?
-    /// How many times the Household has been read again after a change from elsewhere, so
+    /// How many times the Household has been read again after a change in the store, so
     /// screens that show something worked out from it can work it out again.
     private(set) var timesReadAgain = 0
     /// The name this Member goes by in iCloud, once the Household is shared: who "Paid by"
@@ -66,7 +67,7 @@ final class OpenedHousehold {
             let store = try CoreDataHouseholdStore()
             self.store = store
             household = try Household.open(in: store, clock: .system)
-            store.changedElsewhere = { [weak self] in self?.readAgain() }
+            store.householdChanged = { [weak self] in self?.readAgain() }
             followSharing()
         } catch {
             openingError = error.localizedDescription
@@ -150,6 +151,7 @@ final class OpenedHousehold {
 }
 
 extension EnvironmentValues {
-    /// How many times the Household has been read again after a change from another device.
+    /// How many times the Household has been read again after a change in the store, such as
+    /// one synced from another device.
     @Entry var householdReadAgain = 0
 }
