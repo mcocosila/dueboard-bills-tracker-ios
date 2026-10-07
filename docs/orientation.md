@@ -296,7 +296,7 @@ app compares the plan with the phone's pending notifications, removes what is no
 changed, and adds what is missing. It also clears the notifications already shown for a Due no longer among
 `remindedDues`: the Dues not Paid whose Bill is not Retired, which the core answers too. `RootView` runs it
 after launch, after every change to the plan or to `remindedDues`, including one synced from another device,
-and on coming back to the app; that is how a Due marked Paid on the partner's phone stops reminding on this
+and on coming back to the app; that is how a Due marked Paid on another Member's phone stops reminding on this
 one. With notifications declined it does nothing, and the app works the same.
 
 **What comes next**: later tickets grow this same interface. Sharing the Household lives beside the

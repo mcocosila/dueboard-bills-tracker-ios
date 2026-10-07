@@ -13,13 +13,13 @@ struct MembersTests {
         try owner.addBill(.cityPower(in: owner))
         let due = try owner.due(named: "City Power")
         let paidAt = WallClock.at("2026-09-16T13:30:00Z")
-        var partner = try Household.open(in: store, clock: paidAt)
+        var invited = try Household.open(in: store, clock: paidAt)
 
-        try partner.markPaid(due.id, by: "Cristina Popescu")
+        try invited.markPaid(due.id, by: "Ilinca Dobre")
 
         var ownerAgain = try Household.open(in: store, clock: .testing)
         let paid = try #require(try ownerAgain.due(named: "City Power").paid)
-        #expect(paid.by == "Cristina Popescu")
+        #expect(paid.by == "Ilinca Dobre")
         #expect(paid.at == paidAt.now)
     }
 
@@ -29,14 +29,14 @@ struct MembersTests {
         var owner = try Household.open(in: store, clock: .testing)
         try owner.addBill(.cityPower(in: owner))
         let due = try owner.due(named: "City Power")
-        try owner.markPaid(due.id, by: "Mircea Ionescu")
-        var partner = try Household.open(in: store, clock: .testing)
+        try owner.markPaid(due.id, by: "Andrei Vasilescu")
+        var invited = try Household.open(in: store, clock: .testing)
 
-        try partner.undoPaid(due.id)
-        try partner.markPaid(due.id, by: "Cristina Popescu")
+        try invited.undoPaid(due.id)
+        try invited.markPaid(due.id, by: "Ilinca Dobre")
 
         var ownerAgain = try Household.open(in: store, clock: .testing)
-        #expect(try ownerAgain.due(named: "City Power").paid?.by == "Cristina Popescu")
+        #expect(try ownerAgain.due(named: "City Power").paid?.by == "Ilinca Dobre")
     }
 
     @Test("a Member whose device has no Household yet opens the one already in the store, not a new one")
@@ -46,9 +46,9 @@ struct MembersTests {
         try owner.addCategory(named: "Car")
         try owner.addBill(.cityPower(in: owner))
 
-        var partner = try Household.open(in: store, clock: .testing)
+        var invited = try Household.open(in: store, clock: .testing)
 
-        #expect(partner.categories.map(\.name) == owner.categories.map(\.name))
-        #expect(try partner.openBillingMonth(partner.currentBillingMonth).dues.map(\.name) == ["City Power"])
+        #expect(invited.categories.map(\.name) == owner.categories.map(\.name))
+        #expect(try invited.openBillingMonth(invited.currentBillingMonth).dues.map(\.name) == ["City Power"])
     }
 }
