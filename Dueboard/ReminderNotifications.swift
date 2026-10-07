@@ -8,7 +8,7 @@ import UserNotifications
 /// of a notification that is tapped. It holds no rules: which
 /// Reminders exist, when and with what text is the core's answer.
 @MainActor @Observable
-final class ReminderNotifications: NSObject, UNUserNotificationCenterDelegate {
+final class ReminderNotifications: NSObject {
     /// The Billing Month of the notification last tapped, until the Month board has shown it.
     var monthToOpen: BillingMonth?
 
@@ -64,20 +64,29 @@ final class ReminderNotifications: NSObject, UNUserNotificationCenterDelegate {
         let done = shown.filter { request in request.dueID.map { !remindedDues.contains($0) } ?? false }
         center.removeDeliveredNotifications(withIdentifiers: done.map(\.identifier))
     }
+}
 
+// iOS calls these on the main thread and expects its completion handler called there too. The
+// async forms run on a background thread and call it from there, which crashes the app as a tap
+// opens it, so the completion handler forms are used, on the main actor.
+extension ReminderNotifications: @preconcurrency UNUserNotificationCenterDelegate {
     /// A notification tapped opens its Due's Billing Month.
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
-    ) async {
-        guard let month = BillingMonth(response.notification.request.content.userInfo) else { return }
-        await MainActor.run { monthToOpen = month }
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let month = BillingMonth(response.notification.request.content.userInfo) {
+            monthToOpen = month
+        }
+        completionHandler()
     }
 
     /// A Reminder that fires while the app is open shows as a banner all the same.
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
     }
 }
 
