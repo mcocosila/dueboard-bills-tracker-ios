@@ -54,7 +54,9 @@ The app's entitlements (`Dueboard/Dueboard.entitlements`) name the iCloud contai
 distribution signing turns that into `production` on its own. A TestFlight build syncs through CloudKit's
 Production environment, so the CloudKit schema has to be deployed to Production in the CloudKit Console before
 a TestFlight build can sync, and again after any model change that adds a field. Production only ever grows:
-nothing in the model is renamed or removed once deployed.
+nothing in the model is renamed or removed once deployed. Sharing needs the share's own record type,
+`cloudkit.share`, which the Development schema gains only once a Household has been shared from a build run
+from Xcode; share one there before deploying, or a TestFlight build cannot invite anyone.
 
 ## How it was set up
 
