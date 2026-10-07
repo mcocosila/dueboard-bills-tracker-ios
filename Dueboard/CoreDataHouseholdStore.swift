@@ -13,8 +13,9 @@ import HouseholdCore
 /// store of the record it belongs to, since a relationship cannot cross stores. Sharing
 /// itself is in `CoreDataHouseholdStore+Sharing.swift`.
 ///
-/// Used from the main thread only.
-final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
+/// Works on the main actor, with the container's view context, as the screens do.
+@MainActor
+final class CoreDataHouseholdStore: @MainActor HouseholdStore {
     /// The iCloud container the Household syncs through, the same for every build.
     static let iCloudContainer = "iCloud.com.neodonis.dueboard"
     /// Who made a change, as the store's history records it: this app's own commands, as
@@ -96,224 +97,198 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
         }
     }
 
-    deinit {
+    isolated deinit {
         remoteChanges.map(NotificationCenter.default.removeObserver)
     }
 
     /// Reads the history written since last time. When some of it came from another device,
     /// merges the duplicates it may have brought and says so.
-    @MainActor
     private func takeInChangesFromElsewhere() {
         let context = container.viewContext
-        let fromElsewhere = context.performAndWait { () -> Bool in
-            let request = NSPersistentHistoryChangeRequest.fetchHistory(after: historyRead)
-            guard let result = try? context.execute(request) as? NSPersistentHistoryResult,
-                  let transactions = result.result as? [NSPersistentHistoryTransaction]
-            else { return false }
-            if let last = transactions.last { historyRead = last.token }
-            return transactions.contains { $0.author != Self.author }
-        }
-        guard fromElsewhere else { return }
+        let request = NSPersistentHistoryChangeRequest.fetchHistory(after: historyRead)
+        guard let result = try? context.execute(request) as? NSPersistentHistoryResult,
+              let transactions = result.result as? [NSPersistentHistoryTransaction]
+        else { return }
+        if let last = transactions.last { historyRead = last.token }
+        guard transactions.contains(where: { $0.author != Self.author }) else { return }
         _ = try? mergeDuplicates()
         changedElsewhere?()
     }
 
     func load() throws -> HouseholdRecords? {
         let context = container.viewContext
-        return try context.performAndWait {
-            guard let household = try shownHousehold(in: context) else { return nil }
-            let categories = (household.categories as? Set<StoredCategory>) ?? []
-            let billingMonths = (household.billingMonths as? Set<StoredBillingMonth>) ?? []
-            return HouseholdRecords(
-                categories: try categories.map(Category.init),
-                bills: try categories.flatMap { ($0.bills as? Set<StoredBill>) ?? [] }.map(Bill.init),
-                billingMonths: Set(billingMonths.map(BillingMonth.init)),
-                dues: try billingMonths.flatMap { ($0.dues as? Set<StoredDue>) ?? [] }.map(Due.init)
-            )
-        }
+        guard let household = try shownHousehold(in: context) else { return nil }
+        let categories = (household.categories as? Set<StoredCategory>) ?? []
+        let billingMonths = (household.billingMonths as? Set<StoredBillingMonth>) ?? []
+        return HouseholdRecords(
+            categories: try categories.map(Category.init),
+            bills: try categories.flatMap { ($0.bills as? Set<StoredBill>) ?? [] }.map(Bill.init),
+            billingMonths: Set(billingMonths.map(BillingMonth.init)),
+            dues: try billingMonths.flatMap { ($0.dues as? Set<StoredDue>) ?? [] }.map(Due.init)
+        )
     }
 
     func start(_ records: HouseholdRecords) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            let household = StoredHousehold.new(in: privateStore, context: context)
-            household.id = UUID()
-            household.createdAt = .now
-            for category in records.categories {
-                let stored = StoredCategory.new(in: privateStore, context: context)
-                stored.id = category.id
-                stored.household = household
-                stored.keep(category)
-            }
-            try context.save()
+        let household = StoredHousehold.new(in: privateStore, context: context)
+        household.id = UUID()
+        household.createdAt = .now
+        for category in records.categories {
+            let stored = StoredCategory.new(in: privateStore, context: context)
+            stored.id = category.id
+            stored.household = household
+            stored.keep(category)
         }
+        try context.save()
     }
 
     func insert(_ category: HouseholdCore.Category) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
-                let stored = StoredCategory.new(beside: household, in: context)
-                stored.id = category.id
-                stored.household = household
-                stored.keep(category)
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
-            }
+        do {
+            guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+            let stored = StoredCategory.new(beside: household, in: context)
+            stored.id = category.id
+            stored.household = household
+            stored.keep(category)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
     func update(_ categories: [HouseholdCore.Category]) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                for category in categories {
-                    try record(StoredCategory.fetchRequest(), withID: category.id, entity: "Category", in: context)
-                        .keep(category)
-                }
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
+        do {
+            for category in categories {
+                try record(StoredCategory.fetchRequest(), withID: category.id, entity: "Category", in: context)
+                    .keep(category)
             }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
     func deleteCategory(_ categoryID: HouseholdCore.Category.ID) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                let request = StoredCategory.fetchRequest()
-                request.predicate = NSPredicate(format: "id == %@", categoryID as CVarArg)
-                request.affectedStores = [try shownStore(in: context)]
-                for stored in try context.fetch(request) {
-                    context.delete(stored)
-                }
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
+        do {
+            let request = StoredCategory.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", categoryID as CVarArg)
+            request.affectedStores = [try shownStore(in: context)]
+            for stored in try context.fetch(request) {
+                context.delete(stored)
             }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
     func insert(_ bill: Bill) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            let category = try record(
-                StoredCategory.fetchRequest(), withID: bill.categoryID, entity: "Category", in: context
-            )
-            let stored = StoredBill.new(beside: category, in: context)
-            stored.id = bill.id
-            stored.position = Int64(bill.position)
-            stored.keep(detailsOf: bill, in: category)
-            try context.save()
-        }
+        let category = try record(
+            StoredCategory.fetchRequest(), withID: bill.categoryID, entity: "Category", in: context
+        )
+        let stored = StoredBill.new(beside: category, in: context)
+        stored.id = bill.id
+        stored.position = Int64(bill.position)
+        stored.keep(detailsOf: bill, in: category)
+        try context.save()
     }
 
     func update(_ bill: Bill) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                let stored = try record(StoredBill.fetchRequest(), withID: bill.id, entity: "Bill", in: context)
-                let category = try record(
-                    StoredCategory.fetchRequest(), withID: bill.categoryID, entity: "Category", in: context
-                )
-                stored.keep(detailsOf: bill, in: category)
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
-            }
+        do {
+            let stored = try record(StoredBill.fetchRequest(), withID: bill.id, entity: "Bill", in: context)
+            let category = try record(
+                StoredCategory.fetchRequest(), withID: bill.categoryID, entity: "Category", in: context
+            )
+            stored.keep(detailsOf: bill, in: category)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
     func open(_ month: BillingMonth, with dues: [Due]) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
-                let bills = try byID(StoredBill.fetchRequest(), \.id, in: context)
-                let categories = try byID(StoredCategory.fetchRequest(), \.id, in: context)
-                let storedMonth = StoredBillingMonth.new(beside: household, in: context)
-                storedMonth.id = UUID()
-                storedMonth.year = Int32(month.year)
-                storedMonth.month = Int16(month.month)
-                storedMonth.household = household
-                for due in dues {
-                    guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
-                    guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
-                    StoredDue.new(beside: household, in: context).keep(due, of: bill, in: category, month: storedMonth)
-                }
-                try context.save()
-            } catch {
-                // All or nothing: a month left half made in the context would be saved by the next
-                // command, and the month would then stay open with only some of its Dues.
-                context.rollback()
-                throw error
+        do {
+            guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+            let bills = try byID(StoredBill.fetchRequest(), \.id, in: context)
+            let categories = try byID(StoredCategory.fetchRequest(), \.id, in: context)
+            let storedMonth = StoredBillingMonth.new(beside: household, in: context)
+            storedMonth.id = UUID()
+            storedMonth.year = Int32(month.year)
+            storedMonth.month = Int16(month.month)
+            storedMonth.household = household
+            for due in dues {
+                guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
+                guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
+                StoredDue.new(beside: household, in: context).keep(due, of: bill, in: category, month: storedMonth)
             }
+            try context.save()
+        } catch {
+            // All or nothing: a month left half made in the context would be saved by the next
+            // command, and the month would then stay open with only some of its Dues.
+            context.rollback()
+            throw error
         }
         mergeDuplicatesMadeHere()
     }
 
     func insert(_ due: Due) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
-                let request = StoredBillingMonth.fetchRequest()
-                request.predicate = NSPredicate(
-                    format: "household == %@ AND year == %d AND month == %d",
-                    household, due.billingMonth.year, due.billingMonth.month
-                )
-                request.affectedStores = [household.objectID.persistentStore ?? privateStore]
-                guard let month = try context.fetch(request).first else { throw DamagedRecord(entity: "Billing Month") }
-                let bill = try record(StoredBill.fetchRequest(), withID: due.billID, entity: "Bill", in: context)
-                let category = try record(
-                    StoredCategory.fetchRequest(), withID: due.categoryID, entity: "Category", in: context
-                )
-                StoredDue.new(beside: month, in: context).keep(due, of: bill, in: category, month: month)
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
-            }
+        do {
+            guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+            let request = StoredBillingMonth.fetchRequest()
+            request.predicate = NSPredicate(
+                format: "household == %@ AND year == %d AND month == %d",
+                household, due.billingMonth.year, due.billingMonth.month
+            )
+            request.affectedStores = [household.objectID.persistentStore ?? privateStore]
+            guard let month = try context.fetch(request).first else { throw DamagedRecord(entity: "Billing Month") }
+            let bill = try record(StoredBill.fetchRequest(), withID: due.billID, entity: "Bill", in: context)
+            let category = try record(
+                StoredCategory.fetchRequest(), withID: due.categoryID, entity: "Category", in: context
+            )
+            StoredDue.new(beside: month, in: context).keep(due, of: bill, in: category, month: month)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
         mergeDuplicatesMadeHere()
     }
 
     func update(_ due: Due) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                let stored = try record(StoredDue.fetchRequest(), withID: due.id, entity: "Due", in: context)
-                stored.keep(amountAndPaidOf: due)
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
-            }
+        do {
+            let stored = try record(StoredDue.fetchRequest(), withID: due.id, entity: "Due", in: context)
+            stored.keep(amountAndPaidOf: due)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
     func delete(_ dueID: Due.ID) throws {
         let context = container.viewContext
-        try context.performAndWait {
-            do {
-                let request = StoredDue.fetchRequest()
-                request.predicate = NSPredicate(format: "id == %@", dueID as CVarArg)
-                request.affectedStores = [try shownStore(in: context)]
-                for stored in try context.fetch(request) {
-                    context.delete(stored)
-                }
-                try context.save()
-            } catch {
-                context.rollback()
-                throw error
+        do {
+            let request = StoredDue.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", dueID as CVarArg)
+            request.affectedStores = [try shownStore(in: context)]
+            for stored in try context.fetch(request) {
+                context.delete(stored)
             }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
@@ -326,18 +301,16 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
     @discardableResult
     private func mergeDuplicates() throws -> Bool {
         let context = container.viewContext
-        return try context.performAndWait {
-            do {
-                for store in container.persistentStoreCoordinator.persistentStores {
-                    try mergeDuplicates(in: store, context: context)
-                }
-                guard context.hasChanges else { return false }
-                try context.save()
-                return true
-            } catch {
-                context.rollback()
-                throw error
+        do {
+            for store in container.persistentStoreCoordinator.persistentStores {
+                try mergeDuplicates(in: store, context: context)
             }
+            guard context.hasChanges else { return false }
+            try context.save()
+            return true
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 

@@ -8,7 +8,6 @@ import CoreData
 ///
 /// No rules here: what a Member may do is the household core's, and every Member may do
 /// everything.
-@MainActor
 extension CoreDataHouseholdStore {
     /// The iCloud container, as CloudKit's own screens want it.
     var cloudKitContainer: CKContainer { CKContainer(identifier: Self.iCloudContainer) }
@@ -16,18 +15,13 @@ extension CoreDataHouseholdStore {
     /// Whether the Household this phone shows is one this Member was invited to, rather than
     /// their own.
     var showsInvitedHousehold: Bool {
-        let context = container.viewContext
-        return context.performAndWait {
-            (try? shownHousehold(in: context))?.objectID.persistentStore == sharedStore
-        }
+        (try? shownHousehold(in: container.viewContext))?.objectID.persistentStore == sharedStore
     }
 
     /// The share of the Household this phone shows, or nil while its owner has not invited
     /// anyone.
     func shareOfShownHousehold() -> CKShare? {
-        let context = container.viewContext
-        let householdID = context.performAndWait { (try? shownHousehold(in: context))?.objectID }
-        guard let householdID else { return nil }
+        guard let householdID = (try? shownHousehold(in: container.viewContext))?.objectID else { return nil }
         return (try? container.fetchShares(matching: [householdID]))?[householdID]
     }
 
@@ -35,8 +29,7 @@ extension CoreDataHouseholdStore {
     /// needed. Only the owner makes one; an invited Member always finds the owner's.
     func shareForInviting() async throws -> CKShare {
         if let share = shareOfShownHousehold() { return share }
-        let context = container.viewContext
-        guard let household = context.performAndWait({ try? shownHousehold(in: context) }) else {
+        guard let household = try? shownHousehold(in: container.viewContext) else {
             throw DamagedRecord(entity: "Household")
         }
         let (_, share, _) = try await container.share([household], to: nil)
