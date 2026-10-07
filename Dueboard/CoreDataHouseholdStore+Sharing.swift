@@ -25,16 +25,18 @@ extension CoreDataHouseholdStore {
         return (try? container.fetchShares(matching: [householdID]))?[householdID]
     }
 
-    /// The share to invite Members with: the Household's own, made the first time it is
-    /// needed. Only the owner makes one; an invited Member always finds the owner's.
+    /// The share to invite Members with: the Household's own, made the first time the owner
+    /// needs it, with its title saved in it. An invited Member never makes one: their
+    /// Household is the owner's, and only the owner's share invites anyone to it.
     func shareForInviting() async throws -> CKShare {
         if let share = shareOfShownHousehold() { return share }
+        guard !showsInvitedHousehold else { throw SharingRefusal.shareNotArrived }
         guard let household = try? shownHousehold(in: container.viewContext) else {
             throw DamagedRecord(entity: "Household")
         }
         let (_, share, _) = try await container.share([household], to: nil)
         share[CKShare.SystemFieldKey.title] = Self.shareTitle
-        return share
+        return try await container.persistUpdatedShare(share, in: privateStore)
     }
 
     /// What the invite calls the Household.
@@ -62,5 +64,18 @@ extension CoreDataHouseholdStore {
     func forgetInvitedHousehold(_ share: CKShare) async throws {
         guard showsInvitedHousehold, share.currentUserParticipant?.role != .owner else { return }
         try await container.purgeObjectsAndRecordsInZone(with: share.recordID.zoneID, in: sharedStore)
+    }
+}
+
+/// Why sharing the Household was refused.
+enum SharingRefusal: LocalizedError {
+    /// An invited Member's phone has the Household but not yet the owner's share of it.
+    case shareNotArrived
+
+    var errorDescription: String? {
+        switch self {
+        case .shareNotArrived:
+            "The invite's details have not arrived from iCloud yet. Try again in a moment."
+        }
     }
 }
