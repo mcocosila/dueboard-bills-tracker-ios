@@ -5,19 +5,11 @@ import UIKit
 extension View {
     /// Shows, along the bottom, that an accepted invite's Household is on its way, while it is.
     func joiningNotice(_ isJoining: Bool) -> some View {
-        safeAreaInset(edge: .bottom, spacing: 0) {
-            if isJoining {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Joining the household: it shows here once iCloud brings it.")
-                        .lineLimit(2)
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .padding(.horizontal)
-                .background(.bar)
+        bottomNotice(isShown: isJoining) {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Joining the household: it shows here once iCloud brings it.")
+                    .lineLimit(2)
             }
         }
     }
@@ -121,10 +113,8 @@ final class SharingScreen: NSObject, UICloudSharingControllerDelegate {
 
     /// The view controller on top, which the sharing screen is presented from.
     private func topViewController() -> UIViewController? {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive } ?? UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
         var top = scene?.keyWindow?.rootViewController ?? scene?.windows.first?.rootViewController
         while let presented = top?.presentedViewController { top = presented }
         return top

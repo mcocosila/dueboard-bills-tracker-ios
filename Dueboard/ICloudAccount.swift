@@ -35,13 +35,20 @@ extension View {
     /// Shows, along the bottom, the one line that says why nothing syncs when the phone is
     /// signed out of iCloud.
     func iCloudNotice(_ account: ICloudAccount) -> some View {
+        bottomNotice(isShown: account.isUnavailable) {
+            Label("Saved on this device only: sync and sharing need iCloud.", systemImage: "icloud.slash")
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    /// Shows `notice` along the bottom while `isShown`, in small print on the bar.
+    func bottomNotice(isShown: Bool, @ViewBuilder _ notice: () -> some View) -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
-            if account.isUnavailable {
-                Label("Saved on this device only: sync and sharing need iCloud.", systemImage: "icloud.slash")
+            if isShown {
+                notice()
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .padding(.horizontal)
