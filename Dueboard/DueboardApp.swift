@@ -43,7 +43,8 @@ final class OpenedHousehold {
     private(set) var memberName: String?
     /// Whether the Household shown is one this Member was invited to, rather than their own.
     private(set) var isInvited = false
-    /// True from accepting an invite until its Household has arrived on this phone.
+    /// True from accepting an invite until its Household has arrived whole on this phone.
+    /// Meanwhile the Household already on the phone stays on screen.
     private(set) var isJoining = false
     /// How many invites have been joined, so the Month tab can open on the joined
     /// Household's current Billing Month.
@@ -54,8 +55,6 @@ final class OpenedHousehold {
     var sharingError: String?
 
     @ObservationIgnored private var store: CoreDataHouseholdStore?
-    /// The zone of the invite being joined, to know when its Household is the one shown.
-    @ObservationIgnored private var joiningZone: CKRecordZone.ID?
     @ObservationIgnored private lazy var sharingScreen = SharingScreen(
         stopped: { [weak self] share in self?.sharingStopped(share) },
         saved: { [weak self] in self?.followSharing() },
@@ -68,6 +67,8 @@ final class OpenedHousehold {
             self.store = store
             household = try Household.open(in: store, clock: .system)
             store.householdChanged = { [weak self] in self?.readAgain() }
+            store.householdJoined = { [weak self] in self?.joined() }
+            isJoining = store.isJoining
             followSharing()
         } catch {
             openingError = error.localizedDescription
@@ -91,22 +92,27 @@ final class OpenedHousehold {
         }
     }
 
-    /// Joins the Household of an invite this Member accepted. It shows once its records have
-    /// arrived; until then the Household already on this phone stays.
+    /// Joins the Household of an invite this Member accepted. It shows once all its records
+    /// have arrived; until then the Household already on this phone stays. The owner opening
+    /// their own invite joins nothing.
     private func join(_ metadata: CKShare.Metadata) {
         guard let store, metadata.participantRole != .owner else { return }
-        joiningZone = metadata.share.recordID.zoneID
         isJoining = true
         Task {
             do {
                 try await store.accept(metadata)
-                readAgain()
             } catch {
                 isJoining = false
-                joiningZone = nil
                 sharingError = "The invite could not be accepted: \(error.localizedDescription)"
             }
         }
+    }
+
+    /// The joined Household has arrived whole: show it, on its current Billing Month.
+    private func joined() {
+        isJoining = false
+        readAgain()
+        timesJoined += 1
     }
 
     /// After the owner stopped sharing, or this Member left: a Member's device forgets the
@@ -135,18 +141,11 @@ final class OpenedHousehold {
         }
     }
 
-    /// Reads how the Household shown is shared, and whether the invite being joined has
-    /// arrived.
+    /// Reads how the Household shown is shared.
     private func followSharing() {
         guard let store else { return }
         isInvited = store.showsInvitedHousehold
-        let share = store.shareOfShownHousehold()
-        memberName = CoreDataHouseholdStore.memberName(in: share)
-        if isJoining, let joiningZone, share?.recordID.zoneID == joiningZone {
-            isJoining = false
-            self.joiningZone = nil
-            timesJoined += 1
-        }
+        memberName = CoreDataHouseholdStore.memberName(in: store.shareOfShownHousehold())
     }
 }
 

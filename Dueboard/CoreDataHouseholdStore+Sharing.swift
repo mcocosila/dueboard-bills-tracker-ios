@@ -6,8 +6,10 @@ import CoreData
 /// Household shares everything that hangs off it, its Categories, Bills, Billing Months and
 /// Dues, since iCloud moves the whole graph into the share's zone.
 ///
-/// No rules here: what a Member may do is the household core's, and every Member may do
-/// everything.
+/// Every Member may change everything in the Household, so the household core knows
+/// nothing of who is who. What tells the owner from an invited Member is decided here and
+/// by iCloud's own sharing screen: only the owner makes the share, and only a Household this
+/// Member was invited to is ever taken off the phone.
 extension CoreDataHouseholdStore {
     /// The iCloud container, as CloudKit's own screens want it.
     var cloudKitContainer: CKContainer { CKContainer(identifier: Self.iCloudContainer) }
@@ -50,12 +52,56 @@ extension CoreDataHouseholdStore {
         return name.isEmpty ? nil : name
     }
 
-    /// Joins the Household of an accepted invite. Its records arrive in the shared store over
-    /// the next moments, and the store says so as they do. The owner opening their own invite
-    /// joins nothing.
+    /// Joins the Household of an invite to someone else's Household; the owner opening their
+    /// own invite has nothing to join, and the caller does not pass it on. Its records arrive
+    /// in the shared store over the next moments, and it shows once they all have:
+    /// `householdJoined` says when.
     func accept(_ metadata: CKShare.Metadata) async throws {
-        guard metadata.participantRole != .owner else { return }
-        _ = try await container.acceptShareInvitations(from: [metadata], into: sharedStore)
+        joiningZone = metadata.share.recordID.zoneID
+        do {
+            _ = try await container.acceptShareInvitations(from: [metadata], into: sharedStore)
+        } catch {
+            joiningZone = nil
+            throw error
+        }
+    }
+
+    /// Whether an accepted invite's Household is still on its way. Kept on the phone, so an
+    /// app closed while joining still waits for the whole Household when it opens again.
+    var isJoining: Bool { joiningZone != nil }
+
+    /// The zone of the invite being joined, until its Household has arrived whole.
+    var joiningZone: CKRecordZone.ID? {
+        get {
+            guard let zone = UserDefaults.standard.dictionary(forKey: Self.joiningZoneKey) as? [String: String],
+                  let name = zone["zoneName"], let owner = zone["ownerName"]
+            else { return nil }
+            return CKRecordZone.ID(zoneName: name, ownerName: owner)
+        }
+        set {
+            guard let newValue else {
+                UserDefaults.standard.removeObject(forKey: Self.joiningZoneKey)
+                return
+            }
+            UserDefaults.standard.set(
+                ["zoneName": newValue.zoneName, "ownerName": newValue.ownerName], forKey: Self.joiningZoneKey
+            )
+        }
+    }
+
+    private static let joiningZoneKey = "joiningHouseholdZone"
+
+    /// iCloud has finished bringing in a batch of changes to `storeID`. Once one ends with the
+    /// share of the invite being joined in the shared store, that zone has been fetched whole,
+    /// the Household with every Category, Bill, Billing Month and Due, since a share comes in
+    /// the same fetch as the records of its zone. Only then does it show.
+    func importEnded(in storeID: String) {
+        guard let joiningZone, storeID == sharedStore.identifier,
+              let shares = try? container.fetchShares(in: sharedStore),
+              shares.contains(where: { $0.recordID.zoneID == joiningZone })
+        else { return }
+        self.joiningZone = nil
+        householdJoined?()
     }
 
     /// Takes the Household this Member was invited to off this phone, once they have left it

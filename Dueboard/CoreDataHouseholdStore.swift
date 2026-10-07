@@ -33,10 +33,13 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
     /// device from one of its own.
     private var historyRead: NSPersistentHistoryToken?
     private var remoteChanges: (any NSObjectProtocol)?
+    private var syncEvents: (any NSObjectProtocol)?
     /// Called once the stored Household has changed other than through the command that was
     /// just run: a change from another device taken in, or duplicates merged, whether iCloud
     /// brought them or this phone made one. The Household is to be read again.
     var householdChanged: (() -> Void)?
+    /// Called once the Household of an accepted invite has arrived whole and is the one shown.
+    var householdJoined: (() -> Void)?
 
     /// Opens the stores in the app's own storage on this phone, syncing with the Member's
     /// private and shared iCloud databases. Signed out of iCloud, they work the same on this
@@ -99,10 +102,20 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.takeInChangesFromElsewhere() }
         }
+        syncEvents = NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification, object: container, queue: .main
+        ) { [weak self] notification in
+            let event = notification.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                as? NSPersistentCloudKitContainer.Event
+            guard let event, event.type == .import, event.endDate != nil, event.succeeded else { return }
+            let storeID = event.storeIdentifier
+            MainActor.assumeIsolated { self?.importEnded(in: storeID) }
+        }
     }
 
     isolated deinit {
         remoteChanges.map(NotificationCenter.default.removeObserver)
+        syncEvents.map(NotificationCenter.default.removeObserver)
     }
 
     /// Reads the history written since last time. When some of it came from another device,
@@ -423,8 +436,14 @@ final class CoreDataHouseholdStore: @MainActor HouseholdStore {
     /// The Household this phone shows, since a Member has one Household at a time: the one
     /// they were invited to, while they are in it, or else their own. Their own stays in
     /// their iCloud meanwhile, and shows again once they leave or the owner stops sharing.
+    /// While an invite is being joined, their own still shows: the invite's Household arrives
+    /// record by record, and shown half there it would have a Billing Month opened from only
+    /// the Bills that had arrived.
     func shownHousehold(in context: NSManagedObjectContext) throws -> StoredHousehold? {
-        try firstHousehold(in: sharedStore, context: context) ?? firstHousehold(in: privateStore, context: context)
+        if joiningZone == nil, let invited = try firstHousehold(in: sharedStore, context: context) {
+            return invited
+        }
+        return try firstHousehold(in: privateStore, context: context)
     }
 
     /// The store of the Household this phone shows, where every record a command reads or

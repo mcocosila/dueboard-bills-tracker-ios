@@ -61,9 +61,11 @@ Messages or Mail between the two accounts. The Simulator does not open invites r
 ### Accept
 
 1. On B, with Dueboard **not running** (swipe it away), tap the invite in Messages and Open. Dueboard opens,
-   with "Joining the household" along the bottom.
+   with "Joining the household" along the bottom. While the line shows, B's own Household stays on screen,
+   unchanged: A's appears only once all of it has arrived.
 2. Within a minute the line goes and the Month tab shows A's Household on its current Billing Month: A's
-   Bills, Categories and Dues, not B's own.
+   Bills, Categories and Dues, not B's own. Every Recurring Bill of A's has its Due in that month, none
+   missing.
 3. On A, the people button's screen now shows B as accepted.
 
 The Leave steps below check accepting while Dueboard is already running.

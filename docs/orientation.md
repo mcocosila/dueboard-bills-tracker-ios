@@ -231,7 +231,12 @@ to see who joined, add someone or stop sharing; an invited Member sees it too, w
   launched the app, in `windowScene(_:userDidAcceptCloudKitShareWith:)` when it was running. Both pass it to
   `AcceptedInvites`, which keeps it until `OpenedHousehold` is ready. Accepting adds the owner's zone to the
   Member's shared database; the records arrive over the next moments, with a line along the bottom until
-  they have, and then the Month tab shows the joined Household's current Billing Month.
+  they have. Meanwhile the Member's own Household stays on screen: the joined one shows only once an iCloud
+  import into the shared store has ended with the invite's share in it (`importEnded(in:)`), since that
+  fetch brings the whole zone. Shown half arrived, opening its current Billing Month would generate Dues
+  from only the Bills already there, and the month would stay short of the rest for good. The zone being
+  joined is kept in `UserDefaults`, so an app closed while joining waits the same way when it opens again.
+  Then the Month tab shows the joined Household's current Billing Month.
 - **Which Household shows.** A Member is in one Household at a time. A phone that holds a Household the
   Member was invited to (in the shared store) shows it; otherwise it shows the Member's own (in the private
   store). Accepting an invite does not delete the Member's own Household: it stays in their iCloud, hidden,
