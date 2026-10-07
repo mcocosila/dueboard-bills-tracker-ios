@@ -8,6 +8,10 @@ A monthly checklist of household bills so that every amount is paid before its d
 The shared set of Categories, Bills and Billing Months.
 _Avoid_: Account, family, workspace, team
 
+**Member**:
+A person who owns a Household or was invited to it, known by their iCloud name. Every Member can change everything in the Household; only the owner invites others or stops sharing, and an invited Member can leave. A Member is in one Household at a time.
+_Avoid_: User, participant, partner, collaborator
+
 **Bill**:
 Something paid from a Billing Month, described once, e.g. "City Power". Defines the Category, the Due Day rule, and optionally a Default Amount. Either Recurring or Occasional. The Bills together are the one list every Due is drawn from.
 _Avoid_: Expense, template item, subscription, catalog, inventory
@@ -47,7 +51,7 @@ _Avoid_: Fixed amount, estimate
 The money owed on a Due. Unknown until entered, except when pre-filled from a Default Amount. Plain number, single currency.
 
 **Paid**:
-The state of a Due once it has been dealt with for its Billing Month: its Amount paid in full or, for a credit card Due, its Paid Amount paid and the rest left as Unpaid Balance. Records when and by whom. A Due whose Amount is zero is Paid from birth. The Amount cannot be edited while the Due is Paid; Edit (undo Paid) first, then change it. The button that undoes Paid is labelled Edit.
+The state of a Due once it has been dealt with for its Billing Month: its Amount paid in full or, for a credit card Due, its Paid Amount paid and the rest left as Unpaid Balance. Records when and by which Member. A Due whose Amount is zero is Paid from birth. The Amount cannot be edited while the Due is Paid; Edit (undo Paid) first, then change it. The button that undoes Paid is labelled Edit.
 _Avoid_: Settled, cleared, done, partially paid
 
 **Credit Card Bill**:
@@ -75,7 +79,7 @@ A Due that is not Paid and whose Due Date is today or within the next 7 days. De
 _Avoid_: Upcoming, pending, imminent
 
 **Reminder**:
-A notification planned from a Due's state, at 8:00 local time on the day the Due becomes Due Soon, on its Due Date and on the day after. Only for Dues that are not Paid and whose Bill is not Retired; marking the Due Paid, by anyone in the Household, takes its Reminders away, along with any already shown, and Edit brings back those still to come. The phone keeps at most the 64 earliest.
+A notification planned from a Due's state, at 8:00 local time on the day the Due becomes Due Soon, on its Due Date and on the day after. Only for Dues that are not Paid and whose Bill is not Retired; marking the Due Paid, by any Member, takes its Reminders away, along with any already shown, and Edit brings back those still to come. The phone keeps at most the 64 earliest.
 _Avoid_: Alert, alarm, nudge, push
 
 **Unpaid Remaining**:

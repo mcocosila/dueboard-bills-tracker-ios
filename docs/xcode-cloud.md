@@ -47,6 +47,17 @@ TestFlight does not hold each build waiting for an export compliance answer.
 A push to `main`, or to a branch with an open pull request, starts two runs and tests twice. That is a few
 minutes of the 25 compute hours a month, and Auto-cancel Builds drops a run that a newer push has made stale.
 
+## iCloud
+
+The app's entitlements (`Dueboard/Dueboard.entitlements`) name the iCloud container
+`iCloud.com.neodonis.dueboard` and push, with `aps-environment` set to `development`; the Archive action's
+distribution signing turns that into `production` on its own. A TestFlight build syncs through CloudKit's
+Production environment, so the CloudKit schema has to be deployed to Production in the CloudKit Console before
+a TestFlight build can sync, and again after any model change that adds a field. Production only ever grows:
+nothing in the model is renamed or removed once deployed. Sharing needs the share's own record type,
+`cloudkit.share`, which the Development schema gains only once a Household has been shared from a build run
+from Xcode; share one there before deploying, or a TestFlight build cannot invite anyone.
+
 ## How it was set up
 
 1. In Xcode, Integrate > Create Workflow, accepting the suggested workflow, and granting Xcode Cloud access

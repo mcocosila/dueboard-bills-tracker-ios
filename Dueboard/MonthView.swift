@@ -9,11 +9,13 @@ import SwiftUI
 /// by whether it is Paid, Due Soon or Overdue. A Bill the
 /// month has no Due for is added from the Add menu; a Due that is not Paid is removed
 /// by swiping its row. A tapped Reminder's Billing Month is shown in place of the one on screen.
+/// The Household is shared from the toolbar, through iCloud's own sharing screen.
 struct MonthView: View {
     @Binding var household: Household
     /// The Billing Month of a tapped Reminder, cleared once it is shown.
     @Binding var monthToOpen: BillingMonth?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.householdReadAgain) private var householdReadAgain
     @State private var month: BillingMonth
     @State private var board: MonthBoard?
     /// Why the month could not be opened.
@@ -23,7 +25,11 @@ struct MonthView: View {
     /// The Due waiting for its removal to be confirmed.
     @State private var dueBeingRemoved: Due?
     @FocusState private var fieldBeingEntered: DueField?
-    /// Who marks Dues Paid on this phone, until sharing records the iCloud name instead.
+    /// The Household as opened on this phone, with how it is shared; nil in previews.
+    @Environment(OpenedHousehold.self) private var opened: OpenedHousehold?
+    @Environment(ICloudAccount.self) private var iCloud: ICloudAccount?
+    /// Who marks Dues Paid on this phone while the Household is not shared. Once it is, the
+    /// Member's iCloud name is recorded instead.
     @AppStorage("memberName") private var memberName = ""
     @State private var askingForName = false
     @State private var nameBeingEntered = ""
@@ -68,8 +74,17 @@ struct MonthView: View {
             }
             .navigationTitle(month.title)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Your name", systemImage: "person.crop.circle") { askForName { _ in } }
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    if let opened {
+                        Button(
+                            opened.isInvited ? "Household members" : "Share Household",
+                            systemImage: opened.isInvited ? "person.2.fill" : "person.2"
+                        ) { opened.showSharing() }
+                            .disabled(opened.isPreparingShare || iCloud?.isUnavailable == true)
+                    }
+                    if opened?.memberName == nil {
+                        Button("Your name", systemImage: "person.crop.circle") { askForName { _ in } }
+                    }
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -106,6 +121,8 @@ struct MonthView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { showMonth() }
             }
+            // A change in the store, such as a Due marked Paid on another device.
+            .onChange(of: householdReadAgain) { showMonth() }
             .confirmationDialog(
                 "Remove \(dueBeingRemoved?.name ?? "") from \(month.title)?",
                 isPresented: Binding(get: { dueBeingRemoved != nil }, set: { if !$0 { dueBeingRemoved = nil } }),
@@ -198,10 +215,12 @@ struct MonthView: View {
         }
     }
 
-    /// Runs `action` with the name kept on this phone, asking for it first the one time
-    /// there is none.
+    /// Runs `action` with the Member's iCloud name once the Household is shared, or else the
+    /// name kept on this phone, asking for it first the one time there is none.
     private func withMemberName(_ action: @escaping (String) -> Void) {
-        if memberName.isEmpty {
+        if let iCloudName = opened?.memberName {
+            action(iCloudName)
+        } else if memberName.isEmpty {
             askForName(then: action)
         } else {
             action(memberName)

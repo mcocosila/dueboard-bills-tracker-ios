@@ -7,10 +7,14 @@ next to it.
 
 ```
 Dueboard.xcodeproj/            The Xcode project: one app target and the shared Dueboard scheme
-Dueboard/                      The app: SwiftUI screens, the notification adapter and, later, the CloudKit adapter
-  DueboardApp.swift            The entry point (@main); opens the Household and shows the first screen
+Dueboard/                      The app: SwiftUI screens, the notification adapter and the CloudKit adapter
+  DueboardApp.swift            The entry point (@main); opens the Household, reads it again after a change synced
+                               from another device, shares it, joins an accepted invite, and shows the first screen
+  Sharing.swift                Where accepted invites arrive (the scene delegate), iCloud's sharing screen, and
+                               the line shown while an invite's Household is on its way
   RootView.swift               The tabs: the Billing Month and the Bills; keeps the notifications matching the
                                reminder plan and asks for permission the first time there is a Reminder
+  ICloudAccount.swift          Whether the phone is signed in to iCloud, and the line shown when it is not
   ReminderNotifications.swift  The notification adapter: makes the pending notifications match the reminder
                                plan, and opens the Billing Month of a tapped notification
   MonthView.swift              The Month board: a Billing Month's Dues by Category, stepping between months,
@@ -18,9 +22,18 @@ Dueboard/                      The app: SwiftUI screens, the notification adapte
   BillsView.swift              The Bills list, grouped by Category, with the Retired Bills last
   BillFormView.swift           The form for adding or editing a Bill, and Retiring or reactivating it
   CategoriesView.swift         Creating, renaming, reordering and deleting Categories, from the Bills tab
-  CoreDataHouseholdStore.swift Keeps the Household in Core Data on the phone
+  CoreDataHouseholdStore.swift Keeps the Household in Core Data on the phone and syncs it through iCloud
+  CoreDataHouseholdStore+Sharing.swift
+                               Shares the Household with a CloudKit share, accepts an invite, and takes a
+                               Household the Member left off the phone
+  Duplicates.swift             Which copy stays when two devices made the same record before they synced
   Dueboard.xcdatamodeld        The Core Data model, one version per change: Household, Category, Bill,
                                Billing Month and Due
+  Dueboard.entitlements        iCloud (CloudKit, container iCloud.com.neodonis.dueboard) and push, which
+                               CloudKit uses to tell the app a change is waiting
+  Info.plist                   Only the keys Xcode cannot generate from build settings: the remote
+                               notification background mode, so a sync can arrive while the app is not open,
+                               and CKSharingSupported, so tapping an invite opens Dueboard
   Assets.xcassets              App icon and accent colour
 Packages/HouseholdCore/        The household core, a Swift package of its own
   Package.swift                Declares the HouseholdCore library and its test target
@@ -184,16 +197,81 @@ store. The app passes `CoreDataHouseholdStore`, which keeps everything in Core D
 previews pass `InMemoryHouseholdStore`. A store only keeps and returns records: the rules stay in
 `Household`, so the tests of the core cover them whatever the store.
 
-The Core Data model already follows CloudKit's limits (every attribute optional or with a default, every
-relationship optional and with an inverse, no unique constraints and no Deny delete rule), so the iCloud
-sync ticket can switch the container without reshaping the model.
+The Core Data model follows CloudKit's limits: every attribute optional or with a default, every
+relationship optional and with an inverse, no unique constraints and no Deny delete rule.
+
+**iCloud sync.** `CoreDataHouseholdStore` uses `NSPersistentCloudKitContainer`, which mirrors the store to
+the Member's private CloudKit database in the background. The core knows nothing of it. Signed out of
+iCloud, or offline, the store works the same on the phone and syncs later. Three things the adapter adds:
+
+- **Reading again.** The store's history records who made each change. When iCloud brings in one made on
+  another device, the store says so, and `OpenedHousehold` in `DueboardApp.swift` opens the `Household`
+  again from the store; the Month board and the reminder plan follow.
+- **Merging duplicates.** With no server, two devices can each make the same thing before they see each
+  other's change: a new device starts a Household with the suggested Categories before the one in iCloud
+  arrives, or two devices open the same Billing Month offline, each with a Due per Bill. After every sync the
+  store merges them: one Household, one Category per name, one Billing Month per month, one Due per Bill
+  per month, keeping a Paid copy over one not Paid. Every device picks the same copy to keep
+  (`Duplicates.swift`), so two devices tidying up at once never delete each other's. No delete rule
+  cascades, so deleting a duplicate never takes records with it.
+- **One store per CloudKit database.** The private store (`Dueboard.sqlite`, where it always was) mirrors
+  the Member's private database and holds the Household started on this phone, shared or not. The shared
+  store (`Dueboard-shared.sqlite`) mirrors the shared database and holds a Household the Member was invited
+  to. Each new record is put in the store of the record it belongs to, and every command reads and changes
+  records in the store of the Household shown only.
+
+**Sharing.** The owner taps the people button at the top left of the Month tab. The first time, the store
+shares the Household (`NSPersistentCloudKitContainer.share`), which moves it and everything hanging off it
+into a CloudKit zone of its own, still in the owner's private database; then iCloud's own sharing screen
+(`UICloudSharingController`) sends the invite by Messages, Mail or a link. Later taps show the same screen,
+to see who joined, add someone or stop sharing; an invited Member sees it too, with Remove Me to leave.
+
+- **Accepting.** `CKSharingSupported` in `Info.plist` has iOS open Dueboard when an invite is tapped. iOS
+  hands the invite to `SceneDelegate` (`Sharing.swift`): in `scene(_:willConnectTo:options:)` when the tap
+  launched the app, in `windowScene(_:userDidAcceptCloudKitShareWith:)` when it was running. Both pass it to
+  `AcceptedInvites`, which keeps it until `OpenedHousehold` is ready. Accepting adds the owner's zone to the
+  Member's shared database; the records arrive over the next moments, with a line along the bottom until
+  they have. Meanwhile the Member's own Household stays on screen: the joined one shows only once an iCloud
+  import into the shared store has ended with the invite's share in it (`importEnded(in:)`), since that
+  fetch brings the whole zone. Shown half arrived, opening its current Billing Month would generate Dues
+  from only the Bills already there, and the month would stay short of the rest for good. The zone being
+  joined is kept in `UserDefaults`, so an app closed while joining waits the same way when it opens again.
+  Then the Month tab shows the joined Household's current Billing Month.
+- **Which Household shows.** A Member is in one Household at a time. A phone that holds a Household the
+  Member was invited to (in the shared store) shows it; otherwise it shows the Member's own (in the private
+  store). Accepting an invite does not delete the Member's own Household: it stays in their iCloud, hidden,
+  and shows again after they leave or the owner stops sharing.
+- **Stopping sharing and leaving.** Stop Sharing deletes the share; the owner's Household stays in their
+  private database, and the store never purges anything there, which would delete it from the owner's iCloud.
+  The Member's phone loses the zone on its next sync and iCloud takes the Household out of the shared store.
+  A Member who taps Remove Me is taken off the share, and the store purges that zone from the shared store
+  only (`purgeObjectsAndRecordsInZone`), so the Household goes at once. Either way the Household is read
+  again, and Reminders for the Household that went are taken away, since its Dues are no longer in the plan.
+- **Merging duplicates across stores.** Two Households in the private store are always copies of the
+  Member's own and become one. Two in the shared store came with two invites, from two owners, and are never
+  merged; only the copies within each Household are. Nothing is ever merged across the two stores.
+- **Who marked Paid.** Once the Household is shared, the name recorded on a Due marked Paid is the Member's
+  iCloud name, as the share knows it (`currentUserParticipant`). Before, or while iCloud has not said, it
+  is the name typed on this phone.
+
+Sharing is checked by hand on two devices with two iCloud accounts (`docs/manual-checklist.md`); the share's
+record type, `cloudkit.share`, appears in the Development schema only after a first real share, so one is made
+there before the schema is deployed to Production.
+
+The CloudKit schema is made in the Development environment by running the app from Xcode, signed in to
+iCloud, with the launch argument `-initializeCloudKitSchema` (Product > Scheme > Edit Scheme > Run >
+Arguments), which creates every record type and field at once; saving records alone creates only the fields
+they hold a value for. It is then deployed to Production in the CloudKit Console before a TestFlight build
+syncs. After that a model change may only add
+entities and optional attributes; nothing is renamed or removed.
 
 A change to the Core Data model goes in a new model version, never into an existing one: Core Data upgrades
 the store already on a phone only when the app still ships the model that store was made with. In Xcode,
 select `Dueboard.xcdatamodeld`, then Editor > Add Model Version, make the change in the new version and set
 it as current in the File inspector. `Dueboard 2` added Billing Month and Due; `Dueboard 3` added when and by
 whom a Due was marked Paid; `Dueboard 4` added whether a Bill is Retired; `Dueboard 5` added whether a Bill
-and its Dues are Card-Paid, and a Due's Paid Amount.
+and its Dues are Card-Paid, and a Due's Paid Amount; `Dueboard 6` added an id to the Household and the Billing
+Month, so devices merging duplicates pick the same one, and stopped deletes from cascading.
 
 **The clock is injected.** The core never asks the device for the date or the time zone itself. Whoever
 creates a `Household` hands it a `WallClock`, which supplies `now` and the `timeZone`:
@@ -209,9 +287,10 @@ what comes back, the same way a screen would. It never reads private state or st
 core stores things can change without breaking a test. `import HouseholdCore` (not
 `@testable import`) keeps tests honest: they can only see what is `public`.
 
-**Who marks Paid** is a name the core is handed, not one it looks up. Until sharing exists, the app asks for
-it the first time a Due is marked Paid and keeps it on the phone (`MonthView.swift`); sharing will hand the
-member's iCloud name instead.
+**Who marks Paid** is a name the core is handed, not one it looks up. Once the Household is shared, the app
+hands it the Member's iCloud name; before, it asks for a name the first time a Due is marked Paid and keeps
+it on the phone (`MonthView.swift`). `MembersTests` checks that a Due marked Paid by one Member shows as Paid,
+with who and when, on another Member's Household opened from the same records.
 
 **The reminder plan** is the list of notifications that should be pending now: for each Due that is not
 Paid and whose Bill is not Retired, a `Reminder` at 8:00 in the clock's time zone on the day it becomes Due
@@ -221,12 +300,12 @@ made, a `fireDate`, a `title` and a `body`. The core never schedules anything: `
 app compares the plan with the phone's pending notifications, removes what is no longer planned or has
 changed, and adds what is missing. It also clears the notifications already shown for a Due no longer among
 `remindedDues`: the Dues not Paid whose Bill is not Retired, which the core answers too. `RootView` runs it
-after launch, after every change to the plan or to `remindedDues` and on coming back to the app; the iCloud
-sync ticket runs it after every incoming sync too, which is how a Due marked Paid on the partner's phone stops
-reminding on this one. With notifications declined it does nothing, and the app works the same.
+after launch, after every change to the plan or to `remindedDues`, including one synced from another device,
+and on coming back to the app; that is how a Due marked Paid on another Member's phone stops reminding on this
+one. With notifications declined it does nothing, and the app works the same.
 
-**What comes next**: later tickets grow this same interface. CloudKit sync plugs in as an adapter in the
-app, outside the core.
+**What comes next**: later tickets grow this same interface. Sharing the Household lives beside the
+CloudKit adapter in the app, outside the core: the core never knows whether a Household is shared.
 
 **`public`**: Swift hides everything in a module from other modules unless it is marked `public`. The
 app and the tests are other modules, so in the core `public` marks the interface they may use, and anything
