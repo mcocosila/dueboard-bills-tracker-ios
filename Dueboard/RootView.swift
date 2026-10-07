@@ -11,6 +11,7 @@ struct RootView: View {
     @Bindable var reminders: ReminderNotifications
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ICloudAccount.self) private var iCloud
+    @Environment(OpenedHousehold.self) private var opened
     @State private var tab = RootTab.month
     @State private var askingForPermission = false
 
@@ -19,11 +20,26 @@ struct RootView: View {
             Tab("Month", systemImage: "calendar", value: .month) {
                 MonthView(household: $household, monthToOpen: $reminders.monthToOpen)
                     .iCloudNotice(iCloud)
+                    .joiningNotice(opened.isJoining)
             }
             Tab("Bills", systemImage: "list.bullet", value: .bills) {
                 BillsView(household: $household)
                     .iCloudNotice(iCloud)
+                    .joiningNotice(opened.isJoining)
             }
+        }
+        // An invite joined: show the joined Household's current Billing Month.
+        .onChange(of: opened.timesJoined) {
+            reminders.monthToOpen = household.currentBillingMonth
+        }
+        .alert(
+            "Sharing", isPresented: Binding(
+                get: { opened.sharingError != nil }, set: { if !$0 { opened.sharingError = nil } }
+            )
+        ) {
+            Button("OK") {}
+        } message: {
+            Text(opened.sharingError ?? "")
         }
         .task { await matchReminders() }
         .onChange(of: household.reminderPlan) { Task { await matchReminders() } }

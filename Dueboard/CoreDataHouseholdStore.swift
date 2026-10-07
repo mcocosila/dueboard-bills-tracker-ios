@@ -2,14 +2,16 @@ import CloudKit
 import CoreData
 import HouseholdCore
 
-/// Keeps the Household in Core Data on this phone and syncs it through the member's
+/// Keeps the Household in Core Data on this phone and syncs it through the Members'
 /// iCloud. It maps stored records to and from the core's types and holds no rules of
 /// its own.
 ///
-/// Each CloudKit database the Household can live in is a store of its own on the phone.
-/// Today there is one, mirrored to the member's private database; sharing adds the shared
-/// database as a second store beside it. Every new record goes into the store of the
-/// record it belongs to, since a relationship cannot cross stores.
+/// Each CloudKit database the Household can live in is a store of its own on the phone:
+/// the private store, mirrored to this Member's private database, holds the Household
+/// started on this phone, shared or not; the shared store, mirrored to the shared
+/// database, holds a Household this Member was invited to. Every new record goes into the
+/// store of the record it belongs to, since a relationship cannot cross stores. Sharing
+/// itself is in `CoreDataHouseholdStore+Sharing.swift`.
 ///
 /// Used from the main thread only.
 final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
@@ -19,10 +21,13 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
     /// opposed to the changes iCloud brings in from other devices.
     private static let author = "app"
 
-    private let container: NSPersistentCloudKitContainer
-    /// The store mirrored to the member's private CloudKit database, where a Household
-    /// started on this phone is kept.
-    private let privateStore: NSPersistentStore
+    let container: NSPersistentCloudKitContainer
+    /// The store mirrored to the Member's private CloudKit database, where a Household
+    /// started on this phone is kept, also once it is shared.
+    let privateStore: NSPersistentStore
+    /// The store mirrored to the Member's shared CloudKit database, where the Household of
+    /// an invite this Member accepted is kept.
+    let sharedStore: NSPersistentStore
     /// How far this phone has read the store's history, to tell a change from another
     /// device from one of its own.
     private var historyRead: NSPersistentHistoryToken?
@@ -31,27 +36,42 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
     /// any duplicates it brought have been merged.
     var changedElsewhere: (@MainActor () -> Void)?
 
-    /// Opens the store in the app's own storage on this phone, syncing with the member's
-    /// private iCloud database. Signed out of iCloud, it works the same on this phone alone,
-    /// and what was saved meanwhile syncs once the member signs in.
+    /// Opens the stores in the app's own storage on this phone, syncing with the Member's
+    /// private and shared iCloud databases. Signed out of iCloud, they work the same on this
+    /// phone alone, and what was saved meanwhile syncs once the Member signs in.
     init() throws {
         container = NSPersistentCloudKitContainer(name: "Dueboard")
-        // The store stays where it was before sync, so the Household already on the phone is
-        // the one that starts syncing.
-        let description = container.persistentStoreDescriptions[0]
-        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-        let options = NSPersistentCloudKitContainerOptions(containerIdentifier: Self.iCloudContainer)
-        options.databaseScope = .private
-        description.cloudKitContainerOptions = options
+        // The private store stays where it was before sync, so the Household already on the
+        // phone is the one that starts syncing.
+        let privateDescription = container.persistentStoreDescriptions[0]
+        privateDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        privateDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        let privateOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: Self.iCloudContainer)
+        privateOptions.databaseScope = .private
+        privateDescription.cloudKitContainerOptions = privateOptions
+
+        // The shared store sits beside it, with the same options but the shared database.
+        guard let privateURL = privateDescription.url,
+              let sharedDescription = privateDescription.copy() as? NSPersistentStoreDescription
+        else { throw DamagedRecord(entity: "store") }
+        let sharedURL = privateURL.deletingLastPathComponent().appending(path: "Dueboard-shared.sqlite")
+        sharedDescription.url = sharedURL
+        let sharedOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: Self.iCloudContainer)
+        sharedOptions.databaseScope = .shared
+        sharedDescription.cloudKitContainerOptions = sharedOptions
+        container.persistentStoreDescriptions.append(sharedDescription)
 
         var loadError: (any Error)?
-        container.loadPersistentStores { _, error in loadError = error }
-        if let loadError { throw loadError }
-        guard let privateStore = container.persistentStoreCoordinator.persistentStores.first else {
-            throw DamagedRecord(entity: "store")
+        container.loadPersistentStores { _, error in
+            if let error { loadError = error }
         }
+        if let loadError { throw loadError }
+        let coordinator = container.persistentStoreCoordinator
+        guard let privateStore = coordinator.persistentStore(for: privateURL),
+              let sharedStore = coordinator.persistentStore(for: sharedURL)
+        else { throw DamagedRecord(entity: "store") }
         self.privateStore = privateStore
+        self.sharedStore = sharedStore
         #if DEBUG
         // Run once from Xcode, signed in to iCloud, with this launch argument, to create every record
         // type and field of the model in CloudKit's Development environment, ready to deploy to
@@ -101,7 +121,7 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
     func load() throws -> HouseholdRecords? {
         let context = container.viewContext
         return try context.performAndWait {
-            guard let household = try firstHousehold(in: context) else { return nil }
+            guard let household = try shownHousehold(in: context) else { return nil }
             let categories = (household.categories as? Set<StoredCategory>) ?? []
             let billingMonths = (household.billingMonths as? Set<StoredBillingMonth>) ?? []
             return HouseholdRecords(
@@ -133,7 +153,7 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
         let context = container.viewContext
         try context.performAndWait {
             do {
-                guard let household = try firstHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+                guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
                 let stored = StoredCategory.new(beside: household, in: context)
                 stored.id = category.id
                 stored.household = household
@@ -168,6 +188,7 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
             do {
                 let request = StoredCategory.fetchRequest()
                 request.predicate = NSPredicate(format: "id == %@", categoryID as CVarArg)
+                request.affectedStores = [try shownStore(in: context)]
                 for stored in try context.fetch(request) {
                     context.delete(stored)
                 }
@@ -182,9 +203,9 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
     func insert(_ bill: Bill) throws {
         let context = container.viewContext
         try context.performAndWait {
-            let request = StoredCategory.fetchRequest()
-            request.predicate = NSPredicate(format: "id == %@", bill.categoryID as CVarArg)
-            guard let category = try context.fetch(request).first else { throw DamagedRecord(entity: "Category") }
+            let category = try record(
+                StoredCategory.fetchRequest(), withID: bill.categoryID, entity: "Category", in: context
+            )
             let stored = StoredBill.new(beside: category, in: context)
             stored.id = bill.id
             stored.position = Int64(bill.position)
@@ -214,7 +235,7 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
         let context = container.viewContext
         try context.performAndWait {
             do {
-                guard let household = try firstHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
+                guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
                 let bills = try byID(StoredBill.fetchRequest(), \.id, in: context)
                 let categories = try byID(StoredCategory.fetchRequest(), \.id, in: context)
                 let storedMonth = StoredBillingMonth.new(beside: household, in: context)
@@ -242,10 +263,13 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
         let context = container.viewContext
         try context.performAndWait {
             do {
+                guard let household = try shownHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
                 let request = StoredBillingMonth.fetchRequest()
                 request.predicate = NSPredicate(
-                    format: "year == %d AND month == %d", due.billingMonth.year, due.billingMonth.month
+                    format: "household == %@ AND year == %d AND month == %d",
+                    household, due.billingMonth.year, due.billingMonth.month
                 )
+                request.affectedStores = [household.objectID.persistentStore ?? privateStore]
                 guard let month = try context.fetch(request).first else { throw DamagedRecord(entity: "Billing Month") }
                 let bill = try record(StoredBill.fetchRequest(), withID: due.billID, entity: "Bill", in: context)
                 let category = try record(
@@ -281,6 +305,7 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
             do {
                 let request = StoredDue.fetchRequest()
                 request.predicate = NSPredicate(format: "id == %@", dueID as CVarArg)
+                request.affectedStores = [try shownStore(in: context)]
                 for stored in try context.fetch(request) {
                     context.delete(stored)
                 }
@@ -329,6 +354,12 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
 
     /// Merges the duplicates within one store; records in different stores belong to
     /// different Households and are never merged.
+    ///
+    /// In the private store every Household is this Member's own, so two of them are copies
+    /// made on two devices before they synced, and become one. In the shared store each
+    /// Household came with its own invite, from its own owner: they are never merged, and
+    /// only the copies within each are. A Member is in one at a time, but one left behind by
+    /// an invite that is still being taken away must not swallow the next.
     private func mergeDuplicates(in store: NSPersistentStore, context: NSManagedObjectContext) throws {
         func all<Record: NSManagedObject>(_ request: NSFetchRequest<Record>) throws -> [Record] {
             request.affectedStores = [store]
@@ -337,6 +368,10 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
 
         let households = try all(StoredHousehold.fetchRequest())
         for household in households where household.id == nil { household.id = UUID() }
+        guard store == privateStore else {
+            for household in households { mergeDuplicates(within: household, context: context) }
+            return
+        }
         guard let keptID = Duplicates.survivingHousehold(among: households.map { ($0.id!, $0.createdAt) }),
               let household = households.first(where: { $0.id == keptID })
         else { return }
@@ -352,7 +387,12 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
         for month in try all(StoredBillingMonth.fetchRequest()) where month.household == nil {
             month.household = household
         }
+        mergeDuplicates(within: household, context: context)
+    }
 
+    /// Merges the copies within one Household: one Category per name, one Billing Month per
+    /// month, one Due per Bill per Billing Month.
+    private func mergeDuplicates(within household: StoredHousehold, context: NSManagedObjectContext) {
         // Category names are unique whatever the case, so two of the same name are one Category.
         let categories = (household.categories as? Set<StoredCategory> ?? []).filter { $0.id != nil }
         for copies in Dictionary(grouping: categories, by: { $0.name?.lowercased() ?? "" }).values where copies.count > 1 {
@@ -391,29 +431,50 @@ final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
         }
     }
 
-    /// The Household this phone keeps: the first one started, should there ever be more.
-    private func firstHousehold(in context: NSManagedObjectContext) throws -> StoredHousehold? {
+    /// The Household this phone shows, since a Member has one Household at a time: the one
+    /// they were invited to, while they are in it, or else their own. Their own stays in
+    /// their iCloud meanwhile, and shows again once they leave or the owner stops sharing.
+    func shownHousehold(in context: NSManagedObjectContext) throws -> StoredHousehold? {
+        try firstHousehold(in: sharedStore, context: context) ?? firstHousehold(in: privateStore, context: context)
+    }
+
+    /// The store of the Household this phone shows, where every record a command reads or
+    /// changes is: a copy of a record in the other store belongs to the other Household.
+    private func shownStore(in context: NSManagedObjectContext) throws -> NSPersistentStore {
+        try shownHousehold(in: context)?.objectID.persistentStore ?? privateStore
+    }
+
+    /// The first Household started of those in `store`, should there ever be more.
+    private func firstHousehold(in store: NSPersistentStore, context: NSManagedObjectContext) throws -> StoredHousehold? {
         let request = StoredHousehold.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true)]
+        request.affectedStores = [store]
+        request.sortDescriptors = [
+            NSSortDescriptor(keyPath: \StoredHousehold.createdAt, ascending: true),
+            NSSortDescriptor(keyPath: \StoredHousehold.id, ascending: true),
+        ]
         request.fetchLimit = 1
         return try context.fetch(request).first
     }
 
-    /// The record of `entity` with `id`, the first should two share it.
+    /// The record of `entity` with `id` in the shown Household's store, the first should two
+    /// share it.
     private func record<Record: NSManagedObject>(
         _ request: NSFetchRequest<Record>, withID id: UUID, entity: String, in context: NSManagedObjectContext
     ) throws -> Record {
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.affectedStores = [try shownStore(in: context)]
         guard let record = try context.fetch(request).first else { throw DamagedRecord(entity: entity) }
         return record
     }
 
-    /// Every record the request fetches, by id. The model can have no unique
-    /// constraints (CloudKit allows none), so two records sharing an id keep the first.
+    /// Every record the request fetches from the shown Household's store, by id. The model can
+    /// have no unique constraints (CloudKit allows none), so two records sharing an id keep the
+    /// first.
     private func byID<Record>(
         _ request: NSFetchRequest<Record>, _ id: KeyPath<Record, UUID?>, in context: NSManagedObjectContext
     ) throws -> [UUID: Record] {
-        Dictionary(
+        request.affectedStores = [try shownStore(in: context)]
+        return Dictionary(
             try context.fetch(request).compactMap { record in record[keyPath: id].map { ($0, record) } },
             uniquingKeysWith: { first, _ in first }
         )
