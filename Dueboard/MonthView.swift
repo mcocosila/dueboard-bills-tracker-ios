@@ -14,6 +14,7 @@ struct MonthView: View {
     /// The Billing Month of a tapped Reminder, cleared once it is shown.
     @Binding var monthToOpen: BillingMonth?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.householdReadAgain) private var householdReadAgain
     @State private var month: BillingMonth
     @State private var board: MonthBoard?
     /// Why the month could not be opened.
@@ -106,6 +107,8 @@ struct MonthView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { showMonth() }
             }
+            // A change synced from another device, such as a Due marked Paid there.
+            .onChange(of: householdReadAgain) { showMonth() }
             .confirmationDialog(
                 "Remove \(dueBeingRemoved?.name ?? "") from \(month.title)?",
                 isPresented: Binding(get: { dueBeingRemoved != nil }, set: { if !$0 { dueBeingRemoved = nil } }),

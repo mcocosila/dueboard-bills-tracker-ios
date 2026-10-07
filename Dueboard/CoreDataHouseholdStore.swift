@@ -1,17 +1,101 @@
+import CloudKit
 import CoreData
 import HouseholdCore
 
-/// Keeps the Household in Core Data on this phone. It maps stored records to
-/// and from the core's types and holds no rules of its own.
-final class CoreDataHouseholdStore: HouseholdStore {
-    private let container: NSPersistentContainer
+/// Keeps the Household in Core Data on this phone and syncs it through the member's
+/// iCloud. It maps stored records to and from the core's types and holds no rules of
+/// its own.
+///
+/// Each CloudKit database the Household can live in is a store of its own on the phone.
+/// Today there is one, mirrored to the member's private database; sharing adds the shared
+/// database as a second store beside it. Every new record goes into the store of the
+/// record it belongs to, since a relationship cannot cross stores.
+///
+/// Used from the main thread only.
+final class CoreDataHouseholdStore: HouseholdStore, @unchecked Sendable {
+    /// The iCloud container the Household syncs through, the same for every build.
+    static let iCloudContainer = "iCloud.com.neodonis.dueboard"
+    /// Who made a change, as the store's history records it: this app's own commands, as
+    /// opposed to the changes iCloud brings in from other devices.
+    private static let author = "app"
 
-    /// Opens the store in the app's own storage on this phone.
+    private let container: NSPersistentCloudKitContainer
+    /// The store mirrored to the member's private CloudKit database, where a Household
+    /// started on this phone is kept.
+    private let privateStore: NSPersistentStore
+    /// How far this phone has read the store's history, to tell a change from another
+    /// device from one of its own.
+    private var historyRead: NSPersistentHistoryToken?
+    private var remoteChanges: (any NSObjectProtocol)?
+    /// Called on the main thread once a change from another device has been taken in, and
+    /// any duplicates it brought have been merged.
+    var changedElsewhere: (@MainActor () -> Void)?
+
+    /// Opens the store in the app's own storage on this phone, syncing with the member's
+    /// private iCloud database. Signed out of iCloud, it works the same on this phone alone,
+    /// and what was saved meanwhile syncs once the member signs in.
     init() throws {
-        container = NSPersistentContainer(name: "Dueboard")
+        container = NSPersistentCloudKitContainer(name: "Dueboard")
+        // The store stays where it was before sync, so the Household already on the phone is
+        // the one that starts syncing.
+        let description = container.persistentStoreDescriptions[0]
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        let options = NSPersistentCloudKitContainerOptions(containerIdentifier: Self.iCloudContainer)
+        options.databaseScope = .private
+        description.cloudKitContainerOptions = options
+
         var loadError: (any Error)?
         container.loadPersistentStores { _, error in loadError = error }
         if let loadError { throw loadError }
+        guard let privateStore = container.persistentStoreCoordinator.persistentStores.first else {
+            throw DamagedRecord(entity: "store")
+        }
+        self.privateStore = privateStore
+        #if DEBUG
+        // Run once from Xcode, signed in to iCloud, with this launch argument, to create every record
+        // type and field of the model in CloudKit's Development environment, ready to deploy to
+        // Production. Saving records creates only the fields they hold a value for.
+        if ProcessInfo.processInfo.arguments.contains("-initializeCloudKitSchema") {
+            try container.initializeCloudKitSchema(options: [])
+        }
+        #endif
+
+        let context = container.viewContext
+        context.automaticallyMergesChangesFromParent = true
+        // A field changed on this phone wins over the same field changed elsewhere meanwhile.
+        context.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
+        context.transactionAuthor = Self.author
+        historyRead = container.persistentStoreCoordinator.currentPersistentHistoryToken(fromStores: nil)
+
+        try mergeDuplicates()
+        remoteChanges = NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange, object: container.persistentStoreCoordinator, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.takeInChangesFromElsewhere() }
+        }
+    }
+
+    deinit {
+        remoteChanges.map(NotificationCenter.default.removeObserver)
+    }
+
+    /// Reads the history written since last time. When some of it came from another device,
+    /// merges the duplicates it may have brought and says so.
+    @MainActor
+    private func takeInChangesFromElsewhere() {
+        let context = container.viewContext
+        let fromElsewhere = context.performAndWait { () -> Bool in
+            let request = NSPersistentHistoryChangeRequest.fetchHistory(after: historyRead)
+            guard let result = try? context.execute(request) as? NSPersistentHistoryResult,
+                  let transactions = result.result as? [NSPersistentHistoryTransaction]
+            else { return false }
+            if let last = transactions.last { historyRead = last.token }
+            return transactions.contains { $0.author != Self.author }
+        }
+        guard fromElsewhere else { return }
+        _ = try? mergeDuplicates()
+        changedElsewhere?()
     }
 
     func load() throws -> HouseholdRecords? {
@@ -32,10 +116,11 @@ final class CoreDataHouseholdStore: HouseholdStore {
     func start(_ records: HouseholdRecords) throws {
         let context = container.viewContext
         try context.performAndWait {
-            let household = StoredHousehold(context: context)
+            let household = StoredHousehold.new(in: privateStore, context: context)
+            household.id = UUID()
             household.createdAt = .now
             for category in records.categories {
-                let stored = StoredCategory(context: context)
+                let stored = StoredCategory.new(in: privateStore, context: context)
                 stored.id = category.id
                 stored.household = household
                 stored.keep(category)
@@ -49,7 +134,7 @@ final class CoreDataHouseholdStore: HouseholdStore {
         try context.performAndWait {
             do {
                 guard let household = try firstHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
-                let stored = StoredCategory(context: context)
+                let stored = StoredCategory.new(beside: household, in: context)
                 stored.id = category.id
                 stored.household = household
                 stored.keep(category)
@@ -100,7 +185,7 @@ final class CoreDataHouseholdStore: HouseholdStore {
             let request = StoredCategory.fetchRequest()
             request.predicate = NSPredicate(format: "id == %@", bill.categoryID as CVarArg)
             guard let category = try context.fetch(request).first else { throw DamagedRecord(entity: "Category") }
-            let stored = StoredBill(context: context)
+            let stored = StoredBill.new(beside: category, in: context)
             stored.id = bill.id
             stored.position = Int64(bill.position)
             stored.keep(detailsOf: bill, in: category)
@@ -132,14 +217,15 @@ final class CoreDataHouseholdStore: HouseholdStore {
                 guard let household = try firstHousehold(in: context) else { throw DamagedRecord(entity: "Household") }
                 let bills = try byID(StoredBill.fetchRequest(), \.id, in: context)
                 let categories = try byID(StoredCategory.fetchRequest(), \.id, in: context)
-                let storedMonth = StoredBillingMonth(context: context)
+                let storedMonth = StoredBillingMonth.new(beside: household, in: context)
+                storedMonth.id = UUID()
                 storedMonth.year = Int32(month.year)
                 storedMonth.month = Int16(month.month)
                 storedMonth.household = household
                 for due in dues {
                     guard let bill = bills[due.billID] else { throw DamagedRecord(entity: "Bill") }
                     guard let category = categories[due.categoryID] else { throw DamagedRecord(entity: "Category") }
-                    StoredDue(context: context).keep(due, of: bill, in: category, month: storedMonth)
+                    StoredDue.new(beside: household, in: context).keep(due, of: bill, in: category, month: storedMonth)
                 }
                 try context.save()
             } catch {
@@ -149,6 +235,7 @@ final class CoreDataHouseholdStore: HouseholdStore {
                 throw error
             }
         }
+        mergeDuplicatesMadeHere()
     }
 
     func insert(_ due: Due) throws {
@@ -164,13 +251,14 @@ final class CoreDataHouseholdStore: HouseholdStore {
                 let category = try record(
                     StoredCategory.fetchRequest(), withID: due.categoryID, entity: "Category", in: context
                 )
-                StoredDue(context: context).keep(due, of: bill, in: category, month: month)
+                StoredDue.new(beside: month, in: context).keep(due, of: bill, in: category, month: month)
                 try context.save()
             } catch {
                 context.rollback()
                 throw error
             }
         }
+        mergeDuplicatesMadeHere()
     }
 
     func update(_ due: Due) throws {
@@ -200,6 +288,105 @@ final class CoreDataHouseholdStore: HouseholdStore {
             } catch {
                 context.rollback()
                 throw error
+            }
+        }
+    }
+
+    /// Merges the copies of one record that devices made before they saw each other's change,
+    /// so the core never sees two: a Household started on a new device before the Household
+    /// already in iCloud arrived, with its suggested Categories, and a Billing Month opened on
+    /// two devices at once, with a Due per Bill on each. Every device picks the same copy to
+    /// keep (see `Duplicates`), moves what hangs off the others onto it, and deletes the others.
+    /// Returns whether there was anything to merge.
+    @discardableResult
+    private func mergeDuplicates() throws -> Bool {
+        let context = container.viewContext
+        return try context.performAndWait {
+            do {
+                for store in container.persistentStoreCoordinator.persistentStores {
+                    try mergeDuplicates(in: store, context: context)
+                }
+                guard context.hasChanges else { return false }
+                try context.save()
+                return true
+            } catch {
+                context.rollback()
+                throw error
+            }
+        }
+    }
+
+    /// Merges a duplicate this phone has just made itself: a Billing Month opened, or a Due
+    /// added, here after the same arrived from another device but before the Household was
+    /// read again. Runs once the command that made it has finished, then has the Household
+    /// read again, since the copy it holds may be the one merged away.
+    private func mergeDuplicatesMadeHere() {
+        Task { @MainActor [weak self] in
+            guard let self, (try? mergeDuplicates()) == true else { return }
+            changedElsewhere?()
+        }
+    }
+
+    /// Merges the duplicates within one store; records in different stores belong to
+    /// different Households and are never merged.
+    private func mergeDuplicates(in store: NSPersistentStore, context: NSManagedObjectContext) throws {
+        func all<Record: NSManagedObject>(_ request: NSFetchRequest<Record>) throws -> [Record] {
+            request.affectedStores = [store]
+            return try context.fetch(request)
+        }
+
+        let households = try all(StoredHousehold.fetchRequest())
+        for household in households where household.id == nil { household.id = UUID() }
+        guard let keptID = Duplicates.survivingHousehold(among: households.map { ($0.id!, $0.createdAt) }),
+              let household = households.first(where: { $0.id == keptID })
+        else { return }
+        for other in households where other != household {
+            for category in other.categories as? Set<StoredCategory> ?? [] { category.household = household }
+            for month in other.billingMonths as? Set<StoredBillingMonth> ?? [] { month.household = household }
+            context.delete(other)
+        }
+        // A record whose Household was merged away on another device arrives with none.
+        for category in try all(StoredCategory.fetchRequest()) where category.household == nil {
+            category.household = household
+        }
+        for month in try all(StoredBillingMonth.fetchRequest()) where month.household == nil {
+            month.household = household
+        }
+
+        // Category names are unique whatever the case, so two of the same name are one Category.
+        let categories = (household.categories as? Set<StoredCategory> ?? []).filter { $0.id != nil }
+        for copies in Dictionary(grouping: categories, by: { $0.name?.lowercased() ?? "" }).values where copies.count > 1 {
+            guard let keptID = Duplicates.survivor(among: copies.compactMap(\.id)),
+                  let kept = copies.first(where: { $0.id == keptID })
+            else { continue }
+            for other in copies where other != kept {
+                for bill in other.bills as? Set<StoredBill> ?? [] { bill.category = kept }
+                for due in other.dues as? Set<StoredDue> ?? [] { due.category = kept }
+                context.delete(other)
+            }
+        }
+
+        let months = household.billingMonths as? Set<StoredBillingMonth> ?? []
+        for month in months where month.id == nil { month.id = UUID() }
+        for copies in Dictionary(grouping: months, by: { BillingMonth($0) }).values where copies.count > 1 {
+            guard let keptID = Duplicates.survivor(among: copies.compactMap(\.id)),
+                  let kept = copies.first(where: { $0.id == keptID })
+            else { continue }
+            for other in copies where other != kept {
+                for due in other.dues as? Set<StoredDue> ?? [] { due.billingMonth = kept }
+                context.delete(other)
+            }
+        }
+
+        // At most one Due per Bill per Billing Month.
+        for month in household.billingMonths as? Set<StoredBillingMonth> ?? [] {
+            let dues = (month.dues as? Set<StoredDue> ?? []).filter { $0.id != nil && $0.bill?.id != nil }
+            for copies in Dictionary(grouping: dues, by: { $0.bill!.id! }).values where copies.count > 1 {
+                guard let merged = Duplicates.merged(copies.map(\.copy)),
+                      let kept = copies.first(where: { $0.id == merged.id })
+                else { continue }
+                if kept.copy != merged { kept.keep(merged) }
+                for other in copies where other != kept { context.delete(other) }
             }
         }
     }
@@ -336,6 +523,40 @@ private extension StoredDue {
         paidAt = due.paid?.at
         paidBy = due.paid?.by
         paidAmount = due.paid?.paidAmount.map { NSDecimalNumber(decimal: $0) }
+    }
+}
+
+private extension StoredDue {
+    /// The Amount and Paid this copy of the Due holds, to be merged with other copies.
+    var copy: Duplicates.DueCopy {
+        Duplicates.DueCopy(
+            id: id ?? UUID(),
+            amount: amount?.decimalValue,
+            paid: paidAt.map { Duplicates.DueCopy.Paid(at: $0, by: paidBy, paidAmount: paidAmount?.decimalValue) }
+        )
+    }
+
+    /// Takes the Amount and Paid merged from every copy of the Due.
+    func keep(_ merged: Duplicates.DueCopy) {
+        amount = merged.amount.map { NSDecimalNumber(decimal: $0) }
+        paidAt = merged.paid?.at
+        paidBy = merged.paid?.by
+        paidAmount = merged.paid?.paidAmount.map { NSDecimalNumber(decimal: $0) }
+    }
+}
+
+private extension NSManagedObject {
+    /// A new record in the store of `owner`, a saved record it will belong to: a relationship
+    /// cannot cross stores, and the store decides which iCloud database the record syncs to.
+    static func new(beside owner: NSManagedObject, in context: NSManagedObjectContext) -> Self {
+        new(in: owner.objectID.persistentStore, context: context)
+    }
+
+    /// A new record in `store`.
+    static func new(in store: NSPersistentStore?, context: NSManagedObjectContext) -> Self {
+        let record = Self(context: context)
+        if let store { context.assign(record, to: store) }
+        return record
     }
 }
 

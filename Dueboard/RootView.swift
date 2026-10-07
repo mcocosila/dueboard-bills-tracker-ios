@@ -1,13 +1,16 @@
 import HouseholdCore
 import SwiftUI
 
-/// The app's tabs: the Billing Month and the Bills. Keeps the phone's pending notifications
-/// matching the reminder plan after launch, after every change and on coming back to the app,
-/// asking for permission, with the reason, the first time there is a Reminder to send.
+/// The app's tabs: the Billing Month and the Bills, each with a line along the bottom while
+/// the phone is signed out of iCloud. Keeps the phone's pending notifications matching the
+/// reminder plan after launch, after every change, including one synced from another device,
+/// and on coming back to the app, asking for permission, with the reason, the first time there
+/// is a Reminder to send.
 struct RootView: View {
     @Binding var household: Household
     @Bindable var reminders: ReminderNotifications
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(ICloudAccount.self) private var iCloud
     @State private var tab = RootTab.month
     @State private var askingForPermission = false
 
@@ -15,9 +18,11 @@ struct RootView: View {
         TabView(selection: $tab) {
             Tab("Month", systemImage: "calendar", value: .month) {
                 MonthView(household: $household, monthToOpen: $reminders.monthToOpen)
+                    .iCloudNotice(iCloud)
             }
             Tab("Bills", systemImage: "list.bullet", value: .bills) {
                 BillsView(household: $household)
+                    .iCloudNotice(iCloud)
             }
         }
         .task { await matchReminders() }
@@ -27,7 +32,10 @@ struct RootView: View {
         .onChange(of: household.remindedDues) { Task { await matchReminders() } }
         // Reminders whose time has passed drop out of the plan as the days go by.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await matchReminders() } }
+            if phase == .active {
+                Task { await matchReminders() }
+                iCloud.check()
+            }
         }
         .onChange(of: reminders.monthToOpen) { _, month in
             if month != nil { tab = .month }
