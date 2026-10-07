@@ -54,7 +54,7 @@ Done when the pull request is open and every criterion its work verified is tick
 
 ## Where things are
 
-- [CONTEXT.md](CONTEXT.md): the glossary. Code, tests, docs and commit messages use its words.
+- [GLOSSARY.md](GLOSSARY.md): the glossary. Code, tests, docs and commit messages use its words.
 - [README.md](README.md): build, run, test and the release flow.
 - [docs/orientation.md](docs/orientation.md): project layout and the household core seam.
 - [docs/xcode-cloud.md](docs/xcode-cloud.md): the Xcode Cloud workflows; read before changing build settings,

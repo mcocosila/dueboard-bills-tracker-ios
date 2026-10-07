@@ -1,6 +1,6 @@
 import Foundation
 
-/// One Bill in one Billing Month (see CONTEXT.md). Generated from the Bill and
+/// One Bill in one Billing Month (see GLOSSARY.md). Generated from the Bill and
 /// then independent of it: the name, Category, order and Card-Paid are the Bill's as
 /// they were when the Due was generated.
 public struct Due: Hashable, Identifiable, Sendable {
@@ -73,7 +73,7 @@ public struct Due: Hashable, Identifiable, Sendable {
     }
 
     /// When a Due was marked Paid, by whom and, on a credit card Due paid for less than its
-    /// Amount, for how much (see Paid in CONTEXT.md).
+    /// Amount, for how much (see Paid in GLOSSARY.md).
     public struct Paid: Hashable, Sendable {
         public let at: Date
         /// The name of whoever marked it Paid, or nil when it was Paid from birth.
@@ -90,7 +90,7 @@ public struct Due: Hashable, Identifiable, Sendable {
     }
 }
 
-/// The calendar date a Due must be paid by (see CONTEXT.md). A day on the
+/// The calendar date a Due must be paid by (see GLOSSARY.md). A day on the
 /// calendar, not a moment in time, so it is the same date in every time zone.
 public struct DueDate: Hashable, Comparable, Sendable {
     public let year: Int

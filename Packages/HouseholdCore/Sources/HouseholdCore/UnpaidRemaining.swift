@@ -1,6 +1,6 @@
 import Foundation
 
-/// The one number shown per Billing Month (see CONTEXT.md), and how many Dues it
+/// The one number shown per Billing Month (see GLOSSARY.md), and how many Dues it
 /// cannot count yet.
 public struct UnpaidRemaining: Hashable, Sendable {
     /// The sum of the Amounts on the Dues that are not Paid, Card-Paid ones aside.

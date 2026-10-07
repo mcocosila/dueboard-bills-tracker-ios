@@ -1,6 +1,6 @@
 import Foundation
 
-/// A named group of Bills, one of the Household's own (see CONTEXT.md).
+/// A named group of Bills, one of the Household's own (see GLOSSARY.md).
 public struct Category: Hashable, Identifiable, Sendable {
     public let id: UUID
     public internal(set) var name: String

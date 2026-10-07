@@ -24,9 +24,9 @@ Dueboard/                      The app: SwiftUI screens, the notification adapte
   Assets.xcassets              App icon and accent colour
 Packages/HouseholdCore/        The household core, a Swift package of its own
   Package.swift                Declares the HouseholdCore library and its test target
-  Sources/HouseholdCore/       Every domain rule from CONTEXT.md, in plain Swift
+  Sources/HouseholdCore/       Every domain rule from GLOSSARY.md, in plain Swift
   Tests/HouseholdCoreTests/    Swift Testing tests of the core
-CONTEXT.md                     The glossary; the code uses these words
+GLOSSARY.md                    The glossary; the code uses these words
 docs/xcode-cloud.md            How Xcode Cloud builds, tests and uploads to TestFlight
 docs/manual-checklist.md       What automated tests cannot cover, checked by hand on every TestFlight build
 ci_scripts/                    Scripts Xcode Cloud runs during a build: tests before every archive
