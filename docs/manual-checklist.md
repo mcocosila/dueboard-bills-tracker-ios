@@ -3,6 +3,47 @@
 What the household core's tests cannot cover: the adapters that talk to the phone. Every TestFlight build is
 checked against this list on two phones, and issue 14 gathers the steps of the other tickets into it.
 
+## iCloud sync
+
+Two devices signed in to the **same** iCloud account, both with iCloud Drive on and Dueboard allowed under
+Settings > [your name] > iCloud > Apps Using iCloud. A build run from Xcode syncs through CloudKit's
+Development environment, a TestFlight build through Production, and the two never see each other's data: check
+both devices on the same kind of build. The first sync after installing can take a minute; bringing the app to
+the foreground or waiting nudges it along.
+
+### A change on one device appears on the other
+
+1. On device A, with Dueboard set up, add a Bill and open the current Billing Month.
+2. Install Dueboard on device B and open it. Within a minute, B shows A's Bill and the month's Due, with
+   one set of Categories (House, Education, Credit Cards), not two.
+3. On B, enter the Due's Amount and mark it Paid. On A, without restarting the app, the Due turns Paid with
+   B's name and the time, and Unpaid Remaining drops.
+4. On A, Edit the Due back to not Paid, rename a Category and add a Bill. B shows all three.
+
+### Changes made offline sync when the connection returns
+
+1. On device A, turn on Airplane Mode. Mark a Due Paid and add a Bill: both work as usual.
+2. On device B, the change does not show.
+3. On A, turn Airplane Mode off and open Dueboard. Within a minute, B shows the Due Paid and the new Bill.
+
+### The same Billing Month opened on two devices at once
+
+1. Pick a Billing Month neither device has shown yet, usually the month after the current one: stay on the
+   current month on both.
+2. Turn on Airplane Mode on both. On each, step to the next month: each opens it with its own Dues. Mark one
+   Due Paid on device A only.
+3. Turn Airplane Mode off on both and wait for sync. Each device shows the month with one Due per Bill, the
+   one marked Paid on A still Paid, and the same on both.
+
+### Signed out of iCloud
+
+1. On a device signed out of iCloud (Settings > [your name] > Sign Out, or a Simulator never signed in),
+   open Dueboard. A line along the bottom of both tabs reads "Saved on this device only: sync and sharing
+   need iCloud."
+2. Add a Bill, mark a Due Paid, quit and reopen: everything is still there.
+3. Sign in to iCloud and come back to Dueboard: the line goes away, and what was saved while signed out
+   syncs to the other devices on that account.
+
 ## Reminders
 
 Set up on phone A, with notifications not yet allowed for Dueboard:
