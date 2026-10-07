@@ -201,7 +201,7 @@ The Core Data model follows CloudKit's limits: every attribute optional or with 
 relationship optional and with an inverse, no unique constraints and no Deny delete rule.
 
 **iCloud sync.** `CoreDataHouseholdStore` uses `NSPersistentCloudKitContainer`, which mirrors the store to
-the member's private CloudKit database in the background. The core knows nothing of it. Signed out of
+the Member's private CloudKit database in the background. The core knows nothing of it. Signed out of
 iCloud, or offline, the store works the same on the phone and syncs later. Three things the adapter adds:
 
 - **Reading again.** The store's history records who made each change. When iCloud brings in one made on

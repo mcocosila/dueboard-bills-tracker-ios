@@ -2,7 +2,7 @@ import CloudKit
 import SwiftUI
 
 /// Whether the phone is signed in to iCloud, so the app can say when the Household is
-/// kept on this phone alone. Follows the phone as the member signs in or out.
+/// kept on this phone alone. Follows the phone as the Member signs in or out.
 @MainActor @Observable
 final class ICloudAccount {
     /// True when nothing syncs or can be shared: signed out of iCloud, or an account that

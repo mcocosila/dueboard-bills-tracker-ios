@@ -24,7 +24,7 @@ enum Duplicates {
         }?.id
     }
 
-    /// What one copy of a Due holds that a member may have changed: its Amount and Paid.
+    /// What one copy of a Due holds that a Member may have changed: its Amount and Paid.
     struct DueCopy: Equatable {
         var id: UUID
         var amount: Decimal?
