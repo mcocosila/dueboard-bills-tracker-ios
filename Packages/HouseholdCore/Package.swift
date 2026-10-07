@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// The household core: every domain rule in CONTEXT.md, in plain Swift.
+// The household core: every domain rule in GLOSSARY.md, in plain Swift.
 // No SwiftUI, CloudKit or UserNotifications in here; the app depends on this
 // package, never the other way round.
 let package = Package(

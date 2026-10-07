@@ -1,4 +1,4 @@
-/// The calendar month in which a Due must be paid (see CONTEXT.md).
+/// The calendar month in which a Due must be paid (see GLOSSARY.md).
 public struct BillingMonth: Hashable, Comparable, Sendable {
     public let year: Int
     /// 1 for January through 12 for December.

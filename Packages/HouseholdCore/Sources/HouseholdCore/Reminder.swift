@@ -1,6 +1,6 @@
 import Foundation
 
-/// A notification planned from a Due's state (see CONTEXT.md). The core only plans
+/// A notification planned from a Due's state (see GLOSSARY.md). The core only plans
 /// Reminders; the app's notification adapter makes the phone's pending notifications
 /// match the plan.
 public struct Reminder: Hashable, Identifiable, Sendable {

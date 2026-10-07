@@ -1,6 +1,6 @@
 import Foundation
 
-/// What a Due's row says at a glance: Paid, Due Soon or Overdue (see CONTEXT.md).
+/// What a Due's row says at a glance: Paid, Due Soon or Overdue (see GLOSSARY.md).
 /// Derived from the Due and today, never stored. A Due that is not Paid and due more
 /// than 7 days ahead has none.
 public enum DueState: Hashable, Sendable {

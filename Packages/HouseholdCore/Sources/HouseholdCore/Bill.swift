@@ -1,6 +1,6 @@
 import Foundation
 
-/// Something paid from a Billing Month, described once (see CONTEXT.md). Editing it
+/// Something paid from a Billing Month, described once (see GLOSSARY.md). Editing it
 /// changes only the Dues generated afterwards.
 public struct Bill: Hashable, Identifiable, Sendable {
     public let id: UUID
